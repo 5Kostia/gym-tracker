@@ -1,6 +1,7 @@
 // Прогресс: рекорды, графики силы, объём, динамика тела.
-import { h, fmtNum, fmtDate, fmtShort, fmtVolume, todayStr, dateToStr } from '../util.js';
-import { S, exerciseHistory, personalRecords, workoutVolume, measurementsOfType, measureUnit, est1RM } from '../store.js';
+import { h, fmtNum, fmtDate, fmtShort, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
+import { S, exerciseHistory, personalRecords, workoutVolume, measurementsOfType, measureUnit,
+  ONE_REP_MAX_FORMULAS, saveOneRepMaxFormula } from '../store.js';
 import { lineChart, barChart } from '../charts.js';
 
 const ui = { ex: null, metric: 'maxW', body: null };
@@ -44,30 +45,51 @@ export function renderProgress(root, rerender) {
   const names = [...new Set(S.workouts.flatMap((w) => w.exercises.filter((e) => e.sets.length).map((e) => e.name)))].sort((a, b) => a.localeCompare(b, 'ru'));
   if (names.length) {
     if (!ui.ex || !names.includes(ui.ex)) ui.ex = names[0];
-    const box = h('div');
     const select = h('select', { 'aria-label': 'Упражнение', onchange: (e) => { ui.ex = e.target.value; draw(); } },
       names.map((n) => h('option', { value: n, selected: n === ui.ex }, n)));
-    const seg = h('div', { class: 'seg' });
+    const metrics = METRICS.map((m) => h('button', { type: 'button',
+      onclick: () => { ui.metric = m.key; draw(); } }, m.label));
+    const summary = h('div', { class: 'pr-grid' });
+    const graph = h('div');
+    const formulaSelect = h('select', { onchange: async (e) => {
+      formulaSelect.disabled = true;
+      try {
+        await saveOneRepMaxFormula(e.target.value);
+        draw();
+      } catch (error) {
+        console.error(error);
+        formulaSelect.value = S.oneRepMaxFormula;
+        toast('Не удалось сохранить формулу 1ПМ');
+      } finally {
+        formulaSelect.disabled = false;
+      }
+    } }, Array.from(ONE_REP_MAX_FORMULAS, ([id, formula]) =>
+      h('option', { value: id, selected: id === S.oneRepMaxFormula }, formula.label)));
+    const formulaControls = h('div', { style: 'margin-top:12px' },
+      h('label', { class: 'field' }, h('span', null, 'Формула 1ПМ'), formulaSelect),
+      h('p', { class: 'sub' }, 'Расчёт по весу и повторам. На подходах с большим числом повторов оценка менее точна.'));
     function draw() {
       const hist = exerciseHistory(ui.ex);
       const maxW = Math.max(0, ...hist.map((x) => x.maxW));
       const best = hist.reduce((a, x) => (x.e1rm > a ? x.e1rm : a), 0);
       const maxReps = Math.max(0, ...hist.map((x) => x.maxReps));
-      seg.replaceChildren(...METRICS.map((m) => h('button', { type: 'button', class: ui.metric === m.key ? 'on' : '',
-        onclick: () => { ui.metric = m.key; draw(); } }, m.label)));
+      metrics.forEach((btn, i) => {
+        const active = ui.metric === METRICS[i].key;
+        btn.classList.toggle('on', active);
+        btn.setAttribute('aria-pressed', String(active));
+      });
       const m = METRICS.find((x) => x.key === ui.metric);
       const pts = hist.filter((x) => x[m.key] > 0).map((x) => ({ x: x.date, y: m.key === 'maxW' || m.key === 'e1rm' ? Math.round(x[m.key] * 10) / 10 : x[m.key] }));
-      box.replaceChildren(
-        h('div', { class: 'pr-grid' },
-          h('div', { class: 'pr gold' }, h('b', null, maxW ? fmtNum(maxW) : '–'), h('span', null, 'макс. вес, кг')),
-          h('div', { class: 'pr' }, h('b', null, best ? fmtNum(Math.round(best * 10) / 10) : '–'), h('span', null, 'расчётный 1ПМ')),
-          h('div', { class: 'pr' }, h('b', null, maxReps || '–'), h('span', null, 'макс. повторов'))),
-        seg,
-        h('div', { style: 'height:8px' }),
-        lineChart(pts, { unit: m.unit }));
+      summary.replaceChildren(
+        h('div', { class: 'pr gold' }, h('b', null, maxW ? fmtNum(maxW) : '–'), h('span', null, 'макс. вес, кг')),
+        h('div', { class: 'pr' }, h('b', null, best ? fmtNum(Math.round(best * 10) / 10) : '–'), h('span', null, 'расчётный 1ПМ')),
+        h('div', { class: 'pr' }, h('b', null, maxReps || '–'), h('span', null, 'макс. повторов')));
+      formulaControls.hidden = m.key !== 'e1rm';
+      graph.replaceChildren(lineChart(pts, { unit: m.unit }));
     }
     root.append(h('h2', null, 'Сила по упражнению'),
-      h('div', { class: 'card' }, h('label', { class: 'field' }, h('span', null, 'Упражнение'), select), box));
+      h('div', { class: 'card' }, h('label', { class: 'field' }, h('span', null, 'Упражнение'), select),
+        summary, h('div', { class: 'seg' }, metrics), formulaControls, h('div', { style: 'height:8px' }), graph));
     draw();
   }
 
@@ -77,8 +99,7 @@ export function renderProgress(root, rerender) {
     root.append(h('h2', null, 'Личные рекорды'),
       h('div', { class: 'card' }, h('table', { class: 'pr-table' }, prs.map((p) => h('tr', null,
         h('td', null, h('div', null, p.name), h('div', { class: 'd' }, fmtDate(p.date))),
-        h('td', null, h('b', { class: 'gold' }, `${fmtNum(p.weight)} кг`), p.reps ? h('div', { class: 'd' }, `× ${p.reps}`) : null))))),
-      h('p', { class: 'sub' }, '1ПМ считается по формуле Эпли: вес × (1 + повторы / 30). Это оценка, а не проверенный максимум.'));
+        h('td', null, h('b', { class: 'gold' }, `${fmtNum(p.weight)} кг`), p.reps ? h('div', { class: 'd' }, `× ${p.reps}`) : null))))));
   }
 
   // ---- тело ----

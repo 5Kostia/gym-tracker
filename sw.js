@@ -1,15 +1,17 @@
 // Service worker: кэширует файлы приложения, чтобы оно работало без интернета.
 // При изменении любого файла приложения увеличьте номер версии ниже.
-const VERSION = 'gym-tracker-v1';
+const VERSION = 'gym-tracker-v4';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
-  './js/app.js', './js/util.js', './js/db.js', './js/store.js', './js/charts.js',
+  './js/app.js', './js/util.js', './js/db.js', './js/store.js', './js/charts.js', './js/theme.js',
   './js/views/home.js', './js/views/workouts.js', './js/views/measures.js', './js/views/progress.js', './js/views/data.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
+  './icons/dumbbell.png',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  const files = FILES.map((file) => new Request(file, { cache: 'reload' }));
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(files)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

@@ -5,19 +5,27 @@ import {
   recentExerciseNames, addCustomExercise, lastSetsFor, loadAll,
 } from '../store.js';
 
+function formatCardioDuration(total) {
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return [minutes && `${minutes} мин`, seconds && `${seconds} с`].filter(Boolean).join(' ');
+}
+
 // Карточка тренировки (используется в истории и на главной)
 export function workoutCard(w, onOpen) {
   const exNames = w.exercises.map((e) => `${e.name} · ${e.sets.length}`);
   const vol = workoutVolume(w);
+  const cardio = w.cardioSeconds ? formatCardioDuration(w.cardioSeconds) : '';
   return h('button', { class: 'card wcard', type: 'button', onclick: () => onOpen(w) },
     h('div', { class: 'top' },
       h('span', { class: 'date' }, fmtDay(w.date)),
       w.feel ? h('span', { class: 'badge ' + w.feel }, FEELS[w.feel]) : null),
     exNames.length
       ? exNames.slice(0, 4).map((t) => h('div', { class: 'ex' }, t))
-      : h('div', { class: 'ex' }, 'Без упражнений'),
+      : !cardio && h('div', { class: 'ex' }, 'Без упражнений'),
     exNames.length > 4 ? h('div', { class: 'ex' }, `… и ещё ${exNames.length - 4}`) : null,
-    h('div', { class: 'meta num' }, `${countSets(w)} подходов` + (vol ? ` · объём ${fmtVolume(vol)}` : '')),
+    (exNames.length || !cardio) ? h('div', { class: 'meta num' }, `${countSets(w)} подходов` + (vol ? ` · объём ${fmtVolume(vol)}` : '')) : null,
+    cardio ? h('div', { class: 'meta num' }, `Кардио · ${cardio}`) : null,
     w.notes ? h('div', { class: 'meta' }, '📝 ' + (w.notes.length > 80 ? w.notes.slice(0, 80) + '…' : w.notes)) : null);
 }
 
@@ -28,7 +36,7 @@ export function renderWorkouts(root, rerender) {
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => openEditor({ date: todayStr() }, rerender) }, '＋ Новая тренировка'));
 
   if (!S.workouts.length) {
-    root.append(h('div', { class: 'empty' }, 'Пока нет ни одной тренировки. Нажмите «Новая тренировка» и добавьте первое упражнение.'));
+    root.append(h('div', { class: 'empty' }, 'Пока нет ни одной тренировки. Нажмите «Новая тренировка», чтобы записать упражнения или кардио.'));
     return;
   }
   let lastMonth = '';
@@ -53,7 +61,7 @@ export function openEditor(params, onDone) {
   let saving = Promise.resolve();
 
   function hasContent() {
-    return w.exercises.length > 0 || w.notes.trim() || w.feel;
+    return w.exercises.length > 0 || w.cardioSeconds > 0 || w.notes.trim() || w.feel;
   }
   function persistNow() {
     clearTimeout(timer);
@@ -73,6 +81,7 @@ export function openEditor(params, onDone) {
 
   const sh = sheet({
     title: 'Тренировка', full: true,
+    beforeClose: () => deleted || updateCardio(true),
     onClose: async () => { await persistNow(); await loadAll(); onDone && onDone(); },
   });
   const done = h('button', { class: 'btn primary small', type: 'button', onclick: () => sh.close() }, 'Готово');
@@ -89,11 +98,22 @@ export function openEditor(params, onDone) {
   }
 
   function setRow(ex, s, i) {
-    const mk = (key, ph, mode, cls) => h('input', {
-      class: cls || '', type: 'text', inputmode: mode, placeholder: ph, value: s[key] || '', 'aria-label': ph,
-      enterkeyhint: 'next', autocomplete: 'off',
-      oninput: (e) => { s[key] = e.target.value; updateVol(); schedule(); },
-    });
+    const mk = (key, ph, mode, cls) => {
+      let moveCaret = false;
+      return h('input', {
+        class: cls || '', type: 'text', inputmode: mode, placeholder: ph, value: s[key] || '', 'aria-label': ph,
+        enterkeyhint: 'next', autocomplete: 'off',
+        oninput: (e) => { s[key] = e.target.value; updateVol(); schedule(); },
+        onpointerdown: (e) => { moveCaret = e.pointerType === 'touch' && document.activeElement !== e.currentTarget; },
+        onpointercancel: () => { moveCaret = false; },
+        onclick: ({ currentTarget: input }) => {
+          if (!moveCaret) return;
+          moveCaret = false;
+          const end = input.value.length;
+          input.setSelectionRange(end, end);
+        },
+      });
+    };
     return [
       h('div', { class: 'n' }, i + 1),
       mk('w', 'кг', 'decimal'),
@@ -126,18 +146,23 @@ export function openEditor(params, onDone) {
       h('div', { style: 'margin-top:10px' },
         h('button', { class: 'btn small block', type: 'button',
           onclick: () => {
-            const p = ex.sets[ex.sets.length - 1];
-            ex.sets.push(p ? { w: p.w, r: p.r, rpe: '', rir: '' } : { w: '', r: '', rpe: '', rir: '' });
+            ex.sets.push({ w: '', r: '', rpe: '', rir: '' });
             updateVol(); schedule(); renderList();
-            const inputs = listEl.querySelectorAll('.ex-card');
-            const card = [...inputs].find((c) => c.querySelector('h3').textContent === ex.name);
-            if (card) { const all = card.querySelectorAll('.set-grid input'); const el = all[all.length - 4]; el && el.focus({ preventScroll: false }); }
+            focusLatestSet(ex);
           } }, '＋ Подход')));
   }
 
   function renderList() {
     listEl.replaceChildren(...w.exercises.map(exerciseCard));
     if (!w.exercises.length) listEl.append(h('div', { class: 'empty small' }, 'Добавьте первое упражнение'));
+  }
+
+  function focusLatestSet(ex) {
+    const card = listEl.children[w.exercises.indexOf(ex)];
+    const inputs = card.querySelectorAll('.set-grid input');
+    const input = inputs[inputs.length - 4];
+    input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    input.focus({ preventScroll: true });
   }
 
   function pickExercise() {
@@ -148,9 +173,10 @@ export function openEditor(params, onDone) {
       name = name.trim().replace(/\s+/g, ' ');
       if (!name) return;
       addCustomExercise(name).catch(console.error);
-      w.exercises.push({ name, sets: [{ w: '', r: '', rpe: '', rir: '' }] });
+      const ex = { name, sets: [{ w: '', r: '', rpe: '', rir: '' }] };
+      w.exercises.push(ex);
       p.close(); updateVol(); schedule(); renderList();
-      setTimeout(() => { const cards = listEl.querySelectorAll('.ex-card'); const c = cards[cards.length - 1]; if (c) { c.scrollIntoView({ block: 'center' }); const i = c.querySelector('.set-grid input'); i && i.focus(); } }, 60);
+      focusLatestSet(ex);
     }
     function draw() {
       const q = search.value.trim().toLowerCase();
@@ -172,7 +198,7 @@ export function openEditor(params, onDone) {
     search.addEventListener('keydown', (e) => { if (e.key === 'Enter' && search.value.trim()) { e.preventDefault(); const q = search.value.trim().toLowerCase(); const m = allExerciseNames().find((n) => n.toLowerCase() === q); add(m || search.value); } });
     p.body.append(search, list);
     draw();
-    setTimeout(() => search.focus(), 80);
+    search.focus({ preventScroll: true });
   }
 
   const feelBtns = Object.entries(FEELS).map(([k, label]) => h('button', {
@@ -183,12 +209,46 @@ export function openEditor(params, onDone) {
   const notes = h('textarea', { placeholder: 'Как прошла тренировка, самочувствие, что улучшить', 'aria-label': 'Заметки', value: w.notes,
     oninput: (e) => { w.notes = e.target.value; schedule(); } });
 
+  const initialCardio = w.cardioSeconds || 0;
+  const cardioMinutes = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', enterkeyhint: 'next',
+    'aria-label': 'Минуты кардио', placeholder: '0', value: Math.floor(initialCardio / 60) || '', oninput: onCardioInput });
+  const cardioSeconds = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', enterkeyhint: 'done',
+    'aria-label': 'Секунды кардио', placeholder: '0', value: initialCardio % 60 || '', oninput: onCardioInput });
+  const cardioError = h('p', { class: 'cardio-error sub', role: 'status', hidden: true });
+
+  function onCardioInput() {
+    if (updateCardio()) schedule();
+  }
+  function updateCardio(focusInvalid = false) {
+    const minutes = cardioMinutes.value.trim();
+    const seconds = cardioSeconds.value.trim();
+    const secondsValid = /^\d*$/.test(seconds) && Number(seconds) < 60;
+    const duration = Number(minutes) * 60 + (secondsValid ? Number(seconds) : 0);
+    const minutesValid = /^\d*$/.test(minutes) && Number.isSafeInteger(duration);
+    cardioMinutes.setAttribute('aria-invalid', String(!minutesValid));
+    cardioSeconds.setAttribute('aria-invalid', String(!secondsValid));
+    const message = !minutesValid ? 'Введите целое число минут.' : !secondsValid ? 'Введите секунды от 0 до 59.' : '';
+    cardioError.hidden = !message;
+    cardioError.textContent = message;
+    if (message) {
+      if (focusInvalid) (minutesValid ? cardioSeconds : cardioMinutes).focus();
+      return false;
+    }
+    w.cardioSeconds = duration;
+    return true;
+  }
+
   sh.body.append(
     h('label', { class: 'field' }, h('span', null, 'Дата'), dateInput),
     volEl,
     h('div', { style: 'height:10px' }),
     listEl,
     h('button', { class: 'btn primary block', type: 'button', onclick: pickExercise }, '＋ Упражнение'),
+    h('h2', null, 'Кардио'),
+    h('div', { class: 'row cardio-inputs', role: 'group', 'aria-label': 'Время пробежки' },
+      h('label', { class: 'field grow' }, h('span', null, 'Минуты'), cardioMinutes),
+      h('label', { class: 'field grow' }, h('span', null, 'Секунды'), cardioSeconds)),
+    cardioError,
     h('h2', null, 'Оценка дня'),
     h('div', { class: 'seg' }, feelBtns),
     h('h2', null, 'Заметки'),

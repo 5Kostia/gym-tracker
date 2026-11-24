@@ -1,6 +1,7 @@
 // Точка входа: вкладки, перерисовка, регистрация офлайн-режима.
-import { h, svg, toast } from './util.js';
+import { h, svg } from './util.js';
 import { loadAll } from './store.js';
+import { loadTheme } from './theme.js';
 import { renderHome } from './views/home.js';
 import { renderWorkouts } from './views/workouts.js';
 import { renderMeasures } from './views/measures.js';
@@ -8,11 +9,11 @@ import { renderProgress } from './views/progress.js';
 import { renderData } from './views/data.js';
 
 const TABS = [
-  { id: 'home', label: 'Главная', icon: 'M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10', render: renderHome },
-  { id: 'workouts', label: 'Тренировки', icon: 'M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12', render: renderWorkouts },
-  { id: 'measures', label: 'Замеры', icon: 'M3 17l4-4 3 3 5-6 6 7M3 21h18', render: renderMeasures },
-  { id: 'progress', label: 'Прогресс', icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2', render: renderProgress },
-  { id: 'data', label: 'Данные', icon: 'M12 4v11M7 10l5 5 5-5M4 20h16', render: renderData },
+  { id: 'home', label: 'Главная', icon: 'M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5M10 21v-6h4v6', render: renderHome },
+  { id: 'workouts', label: 'Тренировки', render: renderWorkouts },
+  { id: 'measures', label: 'Замеры', icon: 'M3 16.5 16.5 3 21 7.5 7.5 21zM6.5 13l2 2m1-5 2.4 2.4M12.5 7l2 2', render: renderMeasures },
+  { id: 'progress', label: 'Прогресс', icon: 'M6 19v-6M12 19V9M18 19V5', render: renderProgress },
+  { id: 'data', label: 'Данные', icon: 'M4 4.5h16V9H4zM5.5 9v10.5h13V9M10 13h4', render: renderData },
 ];
 
 const app = document.getElementById('app');
@@ -21,24 +22,28 @@ let current = (location.hash || '').replace('#', '');
 if (!TABS.some((t) => t.id === current)) current = 'home';
 
 function goTab(id) {
+  const changed = current !== id;
   current = id;
   history.replaceState(null, '', '#' + id);
-  render();
+  render(changed);
   window.scrollTo(0, 0);
 }
 
 function renderTabs() {
   const inner = h('div', { class: 'inner' }, TABS.map((t) => {
-    const icon = svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: t.icon }));
-    return h('button', { class: 'tab' + (t.id === current ? ' active' : ''), type: 'button', 'aria-current': t.id === current ? 'page' : null,
-      onclick: () => goTab(t.id) }, icon, t.label);
+    const icon = t.icon
+      ? svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: t.icon }))
+      : h('span', { class: 'dumbbell-icon' });
+    return h('button', { class: 'tab tab-' + t.id + (t.id === current ? ' active' : ''), type: 'button',
+      'aria-current': t.id === current ? 'page' : null, onclick: () => goTab(t.id) },
+      h('span', { class: 'tab-icon', 'aria-hidden': 'true' }, icon), t.label);
   }));
   tabsEl.replaceChildren(inner);
 }
 
-function render() {
+function render(animate = false) {
   const y = window.scrollY;
-  const root = h('div');
+  const root = h('div', { class: animate ? 'view-enter' : null });
   const tab = TABS.find((t) => t.id === current);
   try {
     tab.render(root, render, goTab);
@@ -71,4 +76,26 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+if (matchMedia('(pointer: coarse)').matches) {
+  document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
+  const viewport = window.visualViewport;
+  if (viewport) {
+    let previousHeight = viewport.height;
+    const updateViewport = () => {
+      const root = document.documentElement;
+      root.style.setProperty('--visible-height', `${viewport.height}px`);
+      root.style.setProperty('--visible-top', `${viewport.offsetTop}px`);
+      const field = document.activeElement;
+      if (viewport.height < previousHeight && field?.matches('.sheet-body input, .sheet-body textarea')) {
+        field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+      previousHeight = viewport.height;
+    };
+    updateViewport();
+    viewport.addEventListener('resize', updateViewport);
+    viewport.addEventListener('scroll', updateViewport);
+  }
+}
+
+loadTheme();
 start();

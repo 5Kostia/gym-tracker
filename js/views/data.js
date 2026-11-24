@@ -1,6 +1,7 @@
 // Данные: экспорт, импорт, защита от потери, очистка.
 import { h, toast, dialog, confirmDialog, todayStr, fmtDate } from '../util.js';
 import { S, buildBackup, markBackupDone, parseBackup, applyBackup, wipeAll } from '../store.js';
+import { THEMES, saveTheme } from '../theme.js';
 import { daysSinceBackup } from './home.js';
 
 function makeFile() {
@@ -54,6 +55,12 @@ async function importFile(file, rerender) {
 
 export function renderData(root, rerender) {
   root.append(h('h1', null, 'Данные'));
+  const themeSelect = h('select', { onchange: (event) => {
+    try { saveTheme(event.target.value); } catch { toast('Не удалось запомнить выбранную тему'); }
+  } }, Array.from(THEMES, ([id, theme]) =>
+    h('option', { value: id, selected: id === document.documentElement.dataset.theme }, theme.label)));
+  root.append(h('h2', null, 'Оформление'),
+    h('div', { class: 'card' }, h('label', { class: 'field theme-field' }, h('span', null, 'Тема'), themeSelect)));
   const d = daysSinceBackup();
   root.append(h('div', { class: 'banner' + (d !== null && d < 14 ? ' ok' : '') },
     h('p', null, d === null

@@ -88,7 +88,7 @@ export function toast(msg) {
 
 // ---------- окна ----------
 let openSheets = 0;
-export function sheet({ title, full = false, onClose }) {
+export function sheet({ title, full = false, beforeClose, onClose }) {
   const body = h('div', { class: 'sheet-body' });
   const closeBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Закрыть' }, '✕');
   const head = h('div', { class: 'sheet-head' }, h('h2', null, title || ''), closeBtn);
@@ -99,7 +99,7 @@ export function sheet({ title, full = false, onClose }) {
     body, head, box,
     setTitle(t) { head.querySelector('h2').textContent = t; },
     async close() {
-      if (closed) return;
+      if (closed || beforeClose?.() === false) return;
       closed = true;
       if (onClose) { try { await onClose(); } catch (e) { console.error(e); } }
       bg.remove();

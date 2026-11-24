@@ -22,25 +22,37 @@ export const DEFAULT_MEASURES = [
 
 export const FEELS = { easy: 'Лёгкий', medium: 'Средний', hard: 'Тяжёлый' };
 
+const DEFAULT_ONE_REP_MAX_FORMULA = 'epley';
+export const ONE_REP_MAX_FORMULAS = new Map([
+  ['epley', { label: 'Epley', calculate: (w, r) => w * (1 + r / 30) }],
+  ['wendler', { label: 'Wendler', calculate: (w, r) => w + w * r * 0.0333 }],
+  ['brzycki', { label: 'Brzycki', calculate: (w, r) => 36 * w / (37 - r) }],
+  ['oconner', { label: 'O’Conner', calculate: (w, r) => w * (1 + 0.025 * r) }],
+  ['lander', { label: 'Lander', calculate: (w, r) => 100 * w / (101.3 - 2.67123 * r) }],
+]);
+
 export const S = {
   workouts: [],          // новые сверху
   measurements: [],
   customExercises: [],
   measureTypes: [],
   lastBackup: null,      // ISO-строка или null
+  oneRepMaxFormula: DEFAULT_ONE_REP_MAX_FORMULA,
 };
 
 const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));
 
 export async function loadAll() {
-  const [w, m, e, mt, lb] = await Promise.all([
+  const [w, m, e, mt, lb, formula] = await Promise.all([
     DB.all('workouts'), DB.all('measurements'), DB.all('exercises'),
     DB.get('meta', 'measureTypes'), DB.get('meta', 'lastBackup'),
+    DB.get('meta', 'oneRepMaxFormula'),
   ]);
   S.workouts = w.sort(byDateDesc);
   S.measurements = m;
   S.customExercises = e.map((x) => x.name);
   S.lastBackup = lb ? lb.value : null;
+  S.oneRepMaxFormula = ONE_REP_MAX_FORMULAS.has(formula?.value) ? formula.value : DEFAULT_ONE_REP_MAX_FORMULA;
   if (mt && Array.isArray(mt.value) && mt.value.length) {
     S.measureTypes = mt.value;
   } else {
@@ -49,9 +61,15 @@ export async function loadAll() {
   }
 }
 
+export async function saveOneRepMaxFormula(id) {
+  if (!ONE_REP_MAX_FORMULAS.has(id)) return;
+  await DB.put('meta', { key: 'oneRepMaxFormula', value: id });
+  S.oneRepMaxFormula = id;
+}
+
 // ---------- тренировки ----------
 export function newWorkout(date) {
-  return { id: uid(), date, feel: '', notes: '', exercises: [], createdAt: Date.now() };
+  return { id: uid(), date, feel: '', notes: '', exercises: [], cardioSeconds: 0, createdAt: Date.now() };
 }
 export async function saveWorkout(w) {
   w.updatedAt = Date.now();
@@ -117,10 +135,12 @@ export function lastSetsFor(name, date, excludeId) {
   return null;
 }
 
-// Расчётный 1ПМ по формуле Эпли
-export function est1RM(w, r) {
-  if (!(w > 0) || !(r > 0)) return 0;
-  return r === 1 ? w : w * (1 + r / 30);
+export function est1RM(w, r, formulaId = S.oneRepMaxFormula) {
+  if (!Number.isFinite(w) || !Number.isFinite(r) || w <= 0 || r <= 0) return 0;
+  if (r === 1) return w;
+  const formula = ONE_REP_MAX_FORMULAS.get(formulaId) || ONE_REP_MAX_FORMULAS.get(DEFAULT_ONE_REP_MAX_FORMULA);
+  const estimate = formula.calculate(w, r);
+  return Number.isFinite(estimate) && estimate > 0 ? estimate : 0;
 }
 
 // Статистика упражнения по тренировкам (по возрастанию даты)
@@ -226,6 +246,7 @@ export function parseBackup(text) {
       id: w.id, date: w.date,
       feel: ['easy', 'medium', 'hard'].includes(w.feel) ? w.feel : '',
       notes: typeof w.notes === 'string' ? w.notes : '',
+      cardioSeconds: Number.isSafeInteger(w.cardioSeconds) && w.cardioSeconds > 0 ? w.cardioSeconds : 0,
       createdAt: Number(w.createdAt) || Date.now(),
       updatedAt: Number(w.updatedAt) || undefined,
       exercises: w.exercises.filter((e) => e && typeof e.name === 'string' && Array.isArray(e.sets)).map((e) => ({
@@ -263,7 +284,10 @@ export async function applyBackup(parsed, mode) {
   for (const m of parsed.measurements) if (!types.some((t) => t.name === m.type)) types.push({ name: m.type, unit: '' });
   if (!types.length) types = DEFAULT_MEASURES.map((x) => ({ ...x }));
   meta.push({ key: 'measureTypes', value: types });
-  if (mode === 'replace' && S.lastBackup) meta.push({ key: 'lastBackup', value: S.lastBackup });
+  if (mode === 'replace') {
+    if (S.lastBackup) meta.push({ key: 'lastBackup', value: S.lastBackup });
+    meta.push({ key: 'oneRepMaxFormula', value: S.oneRepMaxFormula });
+  }
   await DB.bulk({
     workouts: parsed.workouts,
     measurements: parsed.measurements,
