@@ -1,8 +1,7 @@
 // Данные: экспорт, импорт, защита от потери, очистка.
-import { h, toast, dialog, confirmDialog, todayStr, fmtDate } from '../util.js';
+import { h, toast, dialog, confirmDialog, todayStr } from '../util.js';
 import { S, buildBackup, markBackupDone, parseBackup, applyBackup, wipeAll } from '../store.js';
 import { THEMES, saveTheme } from '../theme.js';
-import { daysSinceBackup } from './home.js';
 
 function makeFile() {
   const json = JSON.stringify(buildBackup(), null, 2);
@@ -61,12 +60,6 @@ export function renderData(root, rerender) {
     h('option', { value: id, selected: id === document.documentElement.dataset.theme }, theme.label)));
   root.append(h('h2', null, 'Оформление'),
     h('div', { class: 'card' }, h('label', { class: 'field theme-field' }, h('span', null, 'Тема'), themeSelect)));
-  const d = daysSinceBackup();
-  root.append(h('div', { class: 'banner' + (d !== null && d < 14 ? ' ok' : '') },
-    h('p', null, d === null
-      ? 'Резервная копия ещё не делалась. Все данные лежат только в памяти этого iPhone: если удалить приложение или сбросить данные Safari, они пропадут.'
-      : `Последняя копия: ${fmtDate(S.lastBackup.slice(0, 10))}${d === 0 ? ' (сегодня)' : `, ${d} дн. назад`}. Делайте копию хотя бы раз в 2 недели.`)));
-
   root.append(h('h2', null, 'Сохранить копию'),
     h('p', { class: 'sub' }, 'Создаётся файл JSON. Лучше всего сохранить его в «Файлы» (iCloud Drive) или отправить себе.'),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => shareBackup(rerender) }, 'Сохранить копию'),

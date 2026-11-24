@@ -1,14 +1,31 @@
 // Список тренировок и редактор тренировки.
-import { h, sheet, dialog, confirmDialog, toast, todayStr, fmtDate, fmtDay, fmtNum, fmtVolume, parseDate, num } from '../util.js';
+import { h, sheet, confirmDialog, toast, todayStr, fmtDay, fmtVolume, parseDate } from '../util.js';
 import {
   S, FEELS, newWorkout, saveWorkout, deleteWorkout, workoutVolume, countSets, allExerciseNames,
-  recentExerciseNames, addCustomExercise, lastSetsFor, loadAll,
+  recentExerciseNames, addCustomExercise, lastSetsFor,
 } from '../store.js';
 
 function formatCardioDuration(total) {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return [minutes && `${minutes} мин`, seconds && `${seconds} с`].filter(Boolean).join(' ');
+}
+
+function celebrateWorkout() {
+  toast('Тренировка успешно добавлена', { top: true });
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const colors = ['var(--accent)', 'var(--ok)', 'var(--gold)', 'var(--text)'];
+  const pieces = Array.from({ length: 18 }, (_, i) => {
+    const angle = i * 2 * Math.PI / 18;
+    const distance = 52 + (i % 5) * 16;
+    const x = Math.round(Math.cos(angle) * distance);
+    const y = Math.round(Math.sin(angle) * distance * .52) + 22;
+    return h('span', { style: `--x:${x}px;--y:${y}px;--spin:${(i - 9) * 37}deg;--piece:${colors[i % colors.length]}` });
+  });
+  const confetti = h('div', { class: 'workout-confetti', 'aria-hidden': 'true' }, pieces);
+  document.body.append(confetti);
+  setTimeout(() => confetti.remove(), 650);
 }
 
 // Карточка тренировки (используется в истории и на главной)
@@ -67,25 +84,45 @@ export function openEditor(params, onDone) {
     clearTimeout(timer);
     if (deleted) return saving;
     if (!stored && !hasContent()) return saving;
-    stored = true;
-    saving = saving.then(() => saveWorkout(JSON.parse(JSON.stringify(w)))).catch((e) => {
-      console.error(e);
-      toast('Не удалось сохранить: ' + (e.message || e));
+    const snapshot = JSON.parse(JSON.stringify(w));
+    const pending = saving.then(async () => {
+      await saveWorkout(snapshot);
+      stored = true;
     });
-    return saving;
+    saving = pending.catch(() => {});
+    return pending;
+  }
+  function reportSaveError(error) {
+    console.error(error);
+    toast('Не удалось сохранить тренировку');
   }
   function schedule() {
     clearTimeout(timer);
-    timer = setTimeout(persistNow, 350);
+    timer = setTimeout(() => persistNow().catch(reportSaveError), 350);
   }
 
   const sh = sheet({
     title: 'Тренировка', full: true,
     beforeClose: () => deleted || updateCardio(true),
-    onClose: async () => { await persistNow(); await loadAll(); onDone && onDone(); },
+    onClose: async () => {
+      sh.box.inert = true;
+      try { await persistNow(); } catch (error) {
+        sh.box.inert = false;
+        reportSaveError(error);
+        return false;
+      }
+      onDone?.();
+    },
   });
-  const done = h('button', { class: 'btn primary small', type: 'button', onclick: () => sh.close() }, 'Готово');
-  sh.head.insertBefore(done, sh.head.lastChild);
+  const done = h('button', { class: 'btn primary big block', type: 'button', onclick: async () => {
+    if (!updateCardio(true)) return;
+    if (!existing && !hasContent()) {
+      toast('Добавьте данные тренировки');
+      return;
+    }
+    if (await sh.close() && !existing) celebrateWorkout();
+  } }, existing ? 'Сохранить изменения' : 'ДОБАВИТЬ ТРЕНИРОВКУ');
+  sh.box.append(h('div', { class: 'sheet-footer' }, done));
 
   const volEl = h('div', { class: 'vol num' });
   const listEl = h('div');
@@ -253,14 +290,14 @@ export function openEditor(params, onDone) {
     h('div', { class: 'seg' }, feelBtns),
     h('h2', null, 'Заметки'),
     notes,
-    existing || stored ? h('div', { style: 'margin-top:20px' },
+    existing ? h('div', { style: 'margin-top:20px' },
       h('button', { class: 'btn danger block', type: 'button',
         onclick: async () => {
           if (!(await confirmDialog('Удалить эту тренировку? Это нельзя отменить.', 'Удалить', true))) return;
           deleted = true;
           clearTimeout(timer);
           await saving;
-          try { await deleteWorkout(w.id); } catch (e) { toast('Не удалось удалить'); return; }
+          try { await deleteWorkout(w.id); } catch (e) { deleted = false; toast('Не удалось удалить'); return; }
           toast('Тренировка удалена');
           sh.close();
         } }, 'Удалить тренировку')) : null);

@@ -78,9 +78,10 @@ export function fmtVolume(kg) {
 
 // ---------- уведомление ----------
 let toastTimer;
-export function toast(msg) {
+export function toast(msg, { top = false } = {}) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  el.classList.toggle('toast-top', top);
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
@@ -99,12 +100,18 @@ export function sheet({ title, full = false, beforeClose, onClose }) {
     body, head, box,
     setTitle(t) { head.querySelector('h2').textContent = t; },
     async close() {
-      if (closed || beforeClose?.() === false) return;
+      if (closed || beforeClose?.() === false) return false;
       closed = true;
-      if (onClose) { try { await onClose(); } catch (e) { console.error(e); } }
+      try {
+        if (onClose && (await onClose()) === false) {
+          closed = false;
+          return false;
+        }
+      } catch (e) { console.error(e); }
       bg.remove();
       openSheets--;
       if (openSheets <= 0) { openSheets = 0; document.body.classList.remove('noscroll'); }
+      return true;
     },
   };
   closeBtn.addEventListener('click', () => api.close());

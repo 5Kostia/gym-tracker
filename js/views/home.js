@@ -5,30 +5,13 @@ import { openEditor, workoutCard } from './workouts.js';
 
 const ui = { y: null, m: null, sel: null };
 
-export function daysSinceBackup() {
-  if (!S.lastBackup) return null;
-  return Math.floor((Date.now() - new Date(S.lastBackup).getTime()) / 86400000);
-}
-
-export function renderHome(root, rerender, goTab) {
+export function renderHome(root, rerender) {
   const today = todayStr();
   if (ui.y === null) { const d = new Date(); ui.y = d.getFullYear(); ui.m = d.getMonth(); }
   if (!ui.sel) ui.sel = today;
 
   root.append(h('h1', null, 'Gym Tracker'),
     h('p', { class: 'sub' }, new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })));
-
-  // напоминание о резервной копии
-  if (S.workouts.length || S.measurements.length) {
-    const d = daysSinceBackup();
-    if (d === null || d >= 14) {
-      root.append(h('div', { class: 'banner' },
-        h('p', null, d === null
-          ? 'Данные хранятся только на этом iPhone. Сделайте резервную копию, чтобы не потерять их.'
-          : `Последняя резервная копия была ${d} дн. назад. Пора сохранить новую.`),
-        h('button', { class: 'btn small', type: 'button', onclick: () => goTab('data') }, 'Открыть «Данные»')));
-    }
-  }
 
   const todays = workoutsOn(today);
   root.append(h('button', { class: 'btn primary big block', type: 'button',

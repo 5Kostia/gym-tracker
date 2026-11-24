@@ -22,9 +22,8 @@ export const DEFAULT_MEASURES = [
 
 export const FEELS = { easy: 'Лёгкий', medium: 'Средний', hard: 'Тяжёлый' };
 
-const DEFAULT_ONE_REP_MAX_FORMULA = 'epley';
+const DEFAULT_ONE_REP_MAX_FORMULA = 'wendler';
 export const ONE_REP_MAX_FORMULAS = new Map([
-  ['epley', { label: 'Epley', calculate: (w, r) => w * (1 + r / 30) }],
   ['wendler', { label: 'Wendler', calculate: (w, r) => w + w * r * 0.0333 }],
   ['brzycki', { label: 'Brzycki', calculate: (w, r) => 36 * w / (37 - r) }],
   ['oconner', { label: 'O’Conner', calculate: (w, r) => w * (1 + 0.025 * r) }],
