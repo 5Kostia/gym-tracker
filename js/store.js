@@ -2,12 +2,22 @@
 import { DB } from './db.js';
 import { uid, isDateStr, num } from './util.js';
 
-export const DEFAULT_EXERCISES = [
-  'Жим лёжа', 'Жим лёжа на наклонной скамье', 'Присед со штангой', 'Становая тяга', 'Румынская тяга',
-  'Жим стоя', 'Тяга штанги в наклоне', 'Подтягивания', 'Отжимания на брусьях', 'Тяга верхнего блока',
-  'Тяга нижнего блока', 'Жим ногами', 'Сгибание рук со штангой', 'Подъём гантелей на бицепс',
-  'Французский жим', 'Разводка гантелей', 'Махи гантелей в стороны', 'Подъём на носки',
+export const EXERCISE_CATEGORIES = [
+  { id: 'biceps', label: 'Бицепс', names: ['Сгибание рук со штангой', 'Подъём гантелей на бицепс', 'Молотки'] },
+  { id: 'triceps', label: 'Трицепс', names: ['Французский жим', 'Отжимания на брусьях'] },
+  { id: 'legs', label: 'Ноги', names: ['Присед со штангой', 'Жим ногами', 'Подъём на носки'] },
+  { id: 'chest', label: 'Грудь', names: ['Жим лёжа', 'Жим лёжа на наклонной скамье', 'Разводка гантелей'] },
+  { id: 'back', label: 'Спина', names: ['Тяга штанги в наклоне', 'Подтягивания', 'Тяга верхнего блока', 'Тяга нижнего блока'] },
+  { id: 'shoulders', label: 'Плечи', names: ['Жим стоя', 'Махи гантелей в стороны'] },
+  { id: 'general', label: 'Общие', names: ['Становая тяга', 'Румынская тяга'] },
+  { id: 'cardio', label: 'Кардио', names: ['Беговая дорожка', 'Велотренажёр', 'Орбитрек', 'Ступеньки'] },
 ];
+const categoryIds = new Set(EXERCISE_CATEGORIES.map(({ id }) => id));
+const defaultExercises = EXERCISE_CATEGORIES.flatMap(({ id, names }) => names.map((name) => ({ name, category: id })));
+
+export function exerciseNameKey(name) {
+  return name.trim().replace(/\s+/g, ' ').toLowerCase().replace(/ё/g, 'е');
+}
 
 export const DEFAULT_MEASURES = [
   { name: 'Вес тела', unit: 'кг', builtin: true },
@@ -47,9 +57,9 @@ export async function loadAll() {
     DB.get('meta', 'measureTypes'), DB.get('meta', 'lastBackup'),
     DB.get('meta', 'oneRepMaxFormula'),
   ]);
-  S.workouts = w.sort(byDateDesc);
+  S.workouts = w.map(moveLegacyCardio).sort(byDateDesc);
   S.measurements = m;
-  S.customExercises = e.map((x) => x.name);
+  S.customExercises = e.map(({ name, category }) => ({ name, category: categoryIds.has(category) ? category : 'general' }));
   S.lastBackup = lb ? lb.value : null;
   S.oneRepMaxFormula = ONE_REP_MAX_FORMULAS.has(formula?.value) ? formula.value : DEFAULT_ONE_REP_MAX_FORMULA;
   if (mt && Array.isArray(mt.value) && mt.value.length) {
@@ -68,8 +78,21 @@ export async function saveOneRepMaxFormula(id) {
 
 // ---------- тренировки ----------
 export function newWorkout(date) {
-  return { id: uid(), date, feel: '', notes: '', exercises: [], cardioSeconds: 0, createdAt: Date.now() };
+  return { id: uid(), date, feel: '', notes: '', exercises: [], createdAt: Date.now() };
 }
+
+function validDuration(seconds) {
+  return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : 0;
+}
+
+function moveLegacyCardio({ cardioSeconds, ...workout }) {
+  const duration = validDuration(cardioSeconds);
+  if (duration && !workout.exercises.some((exercise) => exercise.kind === 'cardio')) {
+    workout.exercises = [...workout.exercises, { name: 'Кардио', kind: 'cardio', durationSeconds: duration, sets: [] }];
+  }
+  return workout;
+}
+
 export async function saveWorkout(w) {
   w.updatedAt = Date.now();
   await DB.put('workouts', w);
@@ -102,10 +125,20 @@ export function countSets(w) {
 }
 
 // ---------- упражнения ----------
-export function allExerciseNames() {
-  const set = new Set([...DEFAULT_EXERCISES, ...S.customExercises]);
-  for (const w of S.workouts) for (const ex of w.exercises) set.add(ex.name);
-  return [...set].sort((a, b) => a.localeCompare(b, 'ru'));
+export function exerciseCatalog() {
+  const entries = new Map();
+  const add = (entry) => {
+    const key = exerciseNameKey(entry.name);
+    if (key && !entries.has(key)) entries.set(key, entry);
+  };
+  defaultExercises.forEach(add);
+  S.customExercises.forEach(add);
+  for (const workout of S.workouts) {
+    for (const exercise of workout.exercises) {
+      add({ name: exercise.name, category: exercise.kind === 'cardio' ? 'cardio' : 'general' });
+    }
+  }
+  return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 export function recentExerciseNames(limit = 8) {
   const out = [];
@@ -115,13 +148,17 @@ export function recentExerciseNames(limit = 8) {
   }
   return out.slice(0, limit);
 }
-export async function addCustomExercise(name) {
-  name = name.trim();
-  if (!name) return;
-  if (!DEFAULT_EXERCISES.includes(name) && !S.customExercises.includes(name)) {
-    await DB.put('exercises', { name });
-    S.customExercises.push(name);
-  }
+export async function addCustomExercise(name, category) {
+  name = name.trim().replace(/\s+/g, ' ');
+  const key = exerciseNameKey(name);
+  if (!key || !categoryIds.has(category)) return null;
+  const existing = exerciseCatalog().find((entry) => exerciseNameKey(entry.name) === key);
+  if (existing) return existing;
+
+  const entry = { name, category };
+  await DB.put('exercises', entry);
+  S.customExercises.push(entry);
+  return entry;
 }
 
 // Подходы этого упражнения из последней прошлой тренировки (для подсказки «в прошлый раз»)
@@ -222,13 +259,31 @@ export function buildBackup() {
     exportedAt: new Date().toISOString(),
     workouts: S.workouts,
     measurements: S.measurements,
-    exercises: S.customExercises,
+    exercises: S.customExercises.map(({ name }) => name),
+    exerciseCategories: Object.fromEntries(S.customExercises.map(({ name, category }) => [name, category])),
     measureTypes: S.measureTypes,
   };
 }
 export async function markBackupDone() {
   S.lastBackup = new Date().toISOString();
   await DB.put('meta', { key: 'lastBackup', value: S.lastBackup });
+}
+
+function parseBackupExercise(exercise) {
+  if (!exercise || typeof exercise.name !== 'string') return [];
+  if (exercise.kind === 'cardio') {
+    return [{ name: exercise.name, kind: 'cardio', durationSeconds: validDuration(exercise.durationSeconds), sets: [] }];
+  }
+  if (!Array.isArray(exercise.sets)) return [];
+  return [{
+    name: exercise.name,
+    sets: exercise.sets.filter((s) => s && typeof s === 'object').map((s) => ({
+      w: s.w == null ? '' : String(s.w),
+      r: s.r == null ? '' : String(s.r),
+      rpe: s.rpe == null ? '' : String(s.rpe),
+      rir: s.rir == null ? '' : String(s.rir),
+    })),
+  }];
 }
 
 // Проверка и очистка данных из файла. Бросает Error с понятным текстом, если файл не подходит.
@@ -241,30 +296,25 @@ export function parseBackup(text) {
   const workouts = [];
   for (const w of d.workouts) {
     if (!w || typeof w.id !== 'string' || !isDateStr(w.date) || !Array.isArray(w.exercises)) continue;
-    workouts.push({
+    workouts.push(moveLegacyCardio({
       id: w.id, date: w.date,
       feel: ['easy', 'medium', 'hard'].includes(w.feel) ? w.feel : '',
       notes: typeof w.notes === 'string' ? w.notes : '',
-      cardioSeconds: Number.isSafeInteger(w.cardioSeconds) && w.cardioSeconds > 0 ? w.cardioSeconds : 0,
+      cardioSeconds: w.cardioSeconds,
       createdAt: Number(w.createdAt) || Date.now(),
       updatedAt: Number(w.updatedAt) || undefined,
-      exercises: w.exercises.filter((e) => e && typeof e.name === 'string' && Array.isArray(e.sets)).map((e) => ({
-        name: e.name,
-        sets: e.sets.filter((s) => s && typeof s === 'object').map((s) => ({
-          w: s.w === undefined || s.w === null ? '' : String(s.w),
-          r: s.r === undefined || s.r === null ? '' : String(s.r),
-          rpe: s.rpe === undefined || s.rpe === null ? '' : String(s.rpe),
-          rir: s.rir === undefined || s.rir === null ? '' : String(s.rir),
-        })),
-      })),
-    });
+      exercises: w.exercises.flatMap(parseBackupExercise),
+    }));
   }
   const measurements = [];
   for (const m of d.measurements) {
     if (!m || typeof m.id !== 'string' || !isDateStr(m.date) || typeof m.type !== 'string' || !Number.isFinite(Number(m.value))) continue;
     measurements.push({ id: m.id, date: m.date, type: m.type, value: Number(m.value), createdAt: Number(m.createdAt) || Date.now() });
   }
-  const exercises = Array.isArray(d.exercises) ? d.exercises.filter((x) => typeof x === 'string' && x.trim()) : [];
+  const exercises = Array.isArray(d.exercises) ? d.exercises.filter((name) => typeof name === 'string' && name.trim()).map((name) => {
+    const category = d.exerciseCategories?.[name];
+    return { name, category: categoryIds.has(category) ? category : undefined };
+  }) : [];
   const measureTypes = Array.isArray(d.measureTypes)
     ? d.measureTypes.filter((t) => t && typeof t.name === 'string' && t.name.trim()).map((t) => ({ name: t.name, unit: typeof t.unit === 'string' ? t.unit : '', builtin: !!t.builtin }))
     : [];
@@ -287,10 +337,11 @@ export async function applyBackup(parsed, mode) {
     if (S.lastBackup) meta.push({ key: 'lastBackup', value: S.lastBackup });
     meta.push({ key: 'oneRepMaxFormula', value: S.oneRepMaxFormula });
   }
+  const categories = new Map((mode === 'merge' ? S.customExercises : []).map(({ name, category }) => [name, category]));
   await DB.bulk({
     workouts: parsed.workouts,
     measurements: parsed.measurements,
-    exercises: parsed.exercises.map((name) => ({ name })),
+    exercises: parsed.exercises.map(({ name, category }) => ({ name, category: category || categories.get(name) || 'general' })),
     meta,
   }, mode === 'replace');
   await loadAll();

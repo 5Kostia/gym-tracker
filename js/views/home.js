@@ -13,10 +13,9 @@ export function renderHome(root, rerender) {
   root.append(h('h1', null, 'Gym Tracker'),
     h('p', { class: 'sub' }, new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })));
 
-  const todays = workoutsOn(today);
   root.append(h('button', { class: 'btn primary big block', type: 'button',
-    onclick: () => openEditor(todays.length ? { id: todays[0].id } : { date: today }, rerender) },
-    todays.length ? 'Продолжить тренировку' : '＋ Начать тренировку'));
+    onclick: () => openEditor({ date: ui.sel }, rerender) }, '＋ Добавить тренировку'));
+  if (ui.sel !== today) root.append(h('p', { class: 'sub add-workout-date' }, `Дата новой тренировки — ${fmtDate(ui.sel)}`));
 
   // сводка
   const monthPrefix = today.slice(0, 7);
@@ -53,8 +52,11 @@ export function renderHome(root, rerender) {
   // выбранный день
   const dayW = workoutsOn(ui.sel);
   root.append(h('h2', null, fmtDate(ui.sel)));
-  if (dayW.length) dayW.forEach((w) => root.append(workoutCard(w, (x) => openEditor({ id: x.id }, rerender))));
-  else root.append(h('div', { class: 'empty small' }, 'В этот день тренировок нет'));
-  root.append(h('button', { class: 'btn block', type: 'button', onclick: () => openEditor({ date: ui.sel }, rerender) },
-    dayW.length ? '＋ Ещё одна тренировка на эту дату' : '＋ Добавить тренировку на эту дату'));
+  if (dayW.length) {
+    dayW.forEach((w) => root.append(workoutCard(w, (x) => openEditor({ id: x.id }, rerender))));
+    root.append(h('button', { class: 'btn block', type: 'button',
+      onclick: () => openEditor({ id: dayW[0].id }, rerender) }, 'Продолжить тренировку'));
+  } else {
+    root.append(h('div', { class: 'empty small' }, 'В этот день тренировок нет'));
+  }
 }

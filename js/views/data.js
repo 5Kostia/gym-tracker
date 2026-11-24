@@ -73,15 +73,9 @@ export function renderData(root, rerender) {
     fileInput,
     h('button', { class: 'btn block', type: 'button', onclick: () => fileInput.click() }, 'Выбрать файл…'));
 
-  const persistEl = h('p', { class: 'sub' }, '');
-  if (navigator.storage && navigator.storage.persisted) {
-    navigator.storage.persisted().then((p) => { persistEl.textContent = p ? 'Защита хранилища от автоочистки: включена.' : 'Защита хранилища от автоочистки: не включена. Резервные копии особенно важны.'; });
-  }
   root.append(h('h2', null, 'О приложении'),
     h('div', { class: 'card' },
-      h('p', { style: 'margin-top:0' }, `Сейчас записей: тренировок — ${S.workouts.length}, замеров — ${S.measurements.length}.`),
-      persistEl,
-      h('p', { class: 'sub', style: 'margin-bottom:0' }, 'Синхронизации между устройствами нет: данные есть только на том устройстве, где вы их ввели. Приложение работает без интернета.')));
+      h('p', { style: 'margin:0' }, `Сейчас записей: тренировок — ${S.workouts.length}, замеров — ${S.measurements.length}.`)));
 
   root.append(h('h2', null, 'Опасная зона'),
     h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
