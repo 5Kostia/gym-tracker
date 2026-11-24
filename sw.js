@@ -1,6 +1,6 @@
 // Service worker: кэширует файлы приложения, чтобы оно работало без интернета.
 // При изменении любого файла приложения увеличьте номер версии ниже.
-const VERSION = 'gym-tracker-v6';
+const VERSION = 'gym-tracker-v7';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/app.js', './js/util.js', './js/db.js', './js/store.js', './js/charts.js', './js/theme.js',

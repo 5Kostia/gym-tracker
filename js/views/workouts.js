@@ -350,8 +350,8 @@ export function openEditor(params, onDone) {
       }
       for (const { id, label } of EXERCISE_CATEGORIES) {
         const entries = catalog.filter((entry) => entry.category === id && exerciseNameKey(entry.name).includes(q));
-        if (entries.length) list.append(h('details', { class: 'pick-group', 'data-category': id, open: Boolean(q) },
-          h('summary', null, label), h('div', { class: 'pick-group-items' }, entries.map(exerciseButton))));
+        if (entries.length) list.append(h('section', { class: 'pick-group', 'data-category': id },
+          h('h3', { class: 'pick-title' }, label), h('div', { class: 'pick-group-items' }, entries.map(exerciseButton))));
       }
       if (!byName.has(q)) list.append(h('button', { class: 'new', type: 'button', onclick: () => createExercise(search.value) },
         q ? `＋ Создать «${search.value.trim()}»` : '＋ Своё упражнение'));

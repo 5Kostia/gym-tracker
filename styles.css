@@ -235,10 +235,8 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .pick-list button { text-align: left; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; min-height: 48px; overflow-wrap: anywhere; cursor: pointer; }
 .pick-list .new { border-color: var(--accent); color: var(--accent); }
 .pick-title { font-size: 12px; color: var(--dim); margin: 12px 2px 0; }
-.pick-group { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.pick-group summary { padding: 13px 12px; min-height: 46px; cursor: pointer; font-weight: 600; }
-.pick-group-items { display: grid; gap: 5px; padding: 0 8px 8px; }
-.pick-group-items button { background: var(--surface2); }
+.pick-group { display: grid; gap: 6px; }
+.pick-group-items { display: grid; gap: 6px; }
 
 /* замеры */
 .m-row { display: grid; grid-template-columns: 1fr 108px; gap: 10px; align-items: center; padding: 6px 0; }
