@@ -18,8 +18,9 @@ js/views/*.js           экраны: home, workouts (+ редактор), measu
 
 ## Модель данных
 - workout: `{id, date 'YYYY-MM-DD', feel 'easy|medium|hard|', notes, exercises:[{name, sets:[{w, r, rpe, rir}]}], createdAt, updatedAt}`. Числа в подходах хранятся строками как введены (допускается запятая), разбираются через `num()`.
+- Кардио хранится в списке упражнений в формате `{name, kind: 'cardio', durationSeconds, sets: []}`. Старое поле тренировки `cardioSeconds` переносится при загрузке и импорте.
 - measurement: `{id, date, type, value:number, createdAt}`
-- exercises: `{name}` только свои; стандартные список в store.js
+- exercises: `{name, category}` для своих упражнений, стандартные группы в store.js.
 - meta: `measureTypes` (список `{name, unit, builtin}`), `lastBackup` (ISO)
 
 ## Принципы
