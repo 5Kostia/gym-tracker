@@ -1,17 +1,22 @@
 // Тонкая обёртка над IndexedDB. Все данные живут только на этом устройстве.
 
 const DB_NAME = 'gym-tracker';
-const DB_VERSION = 1;
-const STORES = ['workouts', 'measurements', 'exercises', 'meta'];
+const DB_VERSION = 2;
+export const STORES = ['workouts', 'measurements', 'exercises', 'meta'];
 let dbPromise = null;
 
-function open() {
+export function open() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     if (!('indexedDB' in window)) { reject(new Error('IndexedDB недоступна в этом браузере')); return; }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      if (!db.objectStoreNames.contains('accountRecords')) {
+        const rows = db.createObjectStore('accountRecords', { keyPath: ['uid', 'group', 'key'] });
+        rows.createIndex('group', ['uid', 'group']);
+        rows.createIndex('pending', ['uid', 'pending']);
+      }
       if (!db.objectStoreNames.contains('workouts')) {
         db.createObjectStore('workouts', { keyPath: 'id' }).createIndex('date', 'date');
       }
@@ -48,7 +53,7 @@ function run(storeName, mode, fn) {
   }));
 }
 
-export const DB = {
+export const guestDB = {
   all: (store) => run(store, 'readonly', (s) => s.getAll()),
   get: (store, key) => run(store, 'readonly', (s) => s.get(key)),
   put: (store, value) => run(store, 'readwrite', (s) => s.put(value)),
@@ -81,3 +86,6 @@ export const DB = {
     t.onabort = () => reject(t.error || new Error('Транзакция отменена'));
   })),
 };
+
+export let DB = guestDB;
+export function useAccountDatabase(accountDB) { DB = accountDB; }

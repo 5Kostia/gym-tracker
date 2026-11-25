@@ -308,3 +308,7 @@ body.noscroll #toast { top: calc(var(--visible-top, 0px) + var(--safe-top) + 62p
   .set-grid .del { width: 32px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+.account-card { display: grid; gap: 10px; }
+.account-card strong { overflow-wrap: anywhere; }
+.account-card .sub { margin: 0; }
+.account-card [hidden] { display: none; }

@@ -120,6 +120,7 @@ export function openEditor(params, onDone) {
   let deleted = false;
   let timer = null;
   let saving = Promise.resolve();
+  let savedContent = existing ? JSON.stringify(w) : null;
   const cardioFields = new Map();
 
   function hasContent() {
@@ -129,9 +130,11 @@ export function openEditor(params, onDone) {
     clearTimeout(timer);
     if (deleted) return saving;
     if (!stored && !hasContent()) return saving;
-    const snapshot = JSON.parse(JSON.stringify(w));
+    const content = JSON.stringify(w);
     const pending = saving.then(async () => {
-      await saveWorkout(snapshot);
+      if (content === savedContent) return;
+      await saveWorkout(JSON.parse(content));
+      savedContent = content;
       stored = true;
     });
     saving = pending.catch(() => {});

@@ -7,13 +7,14 @@ import { renderWorkouts } from './views/workouts.js';
 import { renderMeasures } from './views/measures.js';
 import { renderProgress } from './views/progress.js';
 import { renderData } from './views/data.js';
+import { prepareAccount, startSync } from './account.js';
 
 const TABS = [
   { id: 'home', label: 'Главная', icon: 'M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5M10 21v-6h4v6', render: renderHome },
   { id: 'workouts', label: 'Тренировки', render: renderWorkouts },
   { id: 'measures', label: 'Замеры', icon: 'M3 16.5 16.5 3 21 7.5 7.5 21zM6.5 13l2 2m1-5 2.4 2.4M12.5 7l2 2', render: renderMeasures },
   { id: 'progress', label: 'Прогресс', icon: 'M6 19v-6M12 19V9M18 19V5', render: renderProgress },
-  { id: 'data', label: 'Данные', icon: 'M4 4.5h16V9H4zM5.5 9v10.5h13V9M10 13h4', render: renderData },
+  { id: 'data', label: 'Аккаунт', icon: 'M16 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-1a8 5 0 0 1 16 0v1', render: renderData },
 ];
 
 const app = document.getElementById('app');
@@ -58,6 +59,7 @@ function render(animate = false) {
 
 async function start() {
   try {
+    await prepareAccount();
     await loadAll();
   } catch (e) {
     console.error(e);
@@ -66,6 +68,8 @@ async function start() {
     return;
   }
   render();
+  window.addEventListener('gym-refresh', () => render());
+  startSync();
   // попросить браузер не удалять данные автоматически
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 }
