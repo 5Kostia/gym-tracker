@@ -1,12 +1,13 @@
 // Service worker: кэширует файлы приложения, чтобы оно работало без интернета.
 // При изменении любого файла приложения увеличьте номер версии ниже.
-const VERSION = 'gym-tracker-v17';
+const VERSION = 'gym-tracker-v18';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './js/app.js', './js/util.js', './js/db.js', './js/store.js', './js/charts.js', './js/theme.js',
   './js/views/home.js', './js/views/workouts.js', './js/views/measures.js', './js/views/progress.js', './js/views/data.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png',
   './icons/dumbbell.png',
+  './fonts/barlow-condensed-bold-italic.woff2',
   './js/account.js', './js/account-db.js', './js/firebase.js',
   './js/views/calculator.js', './js/views/progress-period.js',
   './js/vendor/firebase-app.js', './js/vendor/firebase-auth.js', './js/vendor/firebase-firestore.js',

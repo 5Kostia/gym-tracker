@@ -1,4 +1,4 @@
-import { h, num, fmtNum } from '../util.js';
+import { h, choiceField, num, fmtNum } from '../util.js';
 import { S, ONE_REP_MAX_FORMULAS, est1RM } from '../store.js';
 
 const input = { weight: '', reps: '', formula: null };
@@ -40,7 +40,7 @@ export function renderCalculator(root) {
   reps.addEventListener('input', calculate);
   formula.addEventListener('change', () => { input.formula = formula.value; calculate(); });
   root.append(h('div', { class: 'card calc-card' },
-    h('label', { class: 'field' }, h('span', null, 'Формула 1ПМ'), formula),
+    choiceField('Формула 1ПМ', formula),
     h('div', { class: 'calc-fields' },
       h('label', { class: 'field' }, h('span', null, 'Вес, кг'), weight),
       h('label', { class: 'field' }, h('span', null, 'Повторы'), reps)),

@@ -1,5 +1,5 @@
 // Прогресс: рекорды, графики силы, объём, динамика тела.
-import { h, fmtNum, fmtDate, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
+import { h, choiceField, fmtNum, fmtDate, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
 import { S, exerciseHistory, personalRecords, workoutVolume, measurementsOfType, measureUnit,
   ONE_REP_MAX_FORMULAS, saveOneRepMaxFormula } from '../store.js';
 import { lineChart } from '../charts.js';
@@ -70,7 +70,8 @@ export function renderProgress(root, rerender) {
     const summary = h('div', { class: 'pr-grid' });
     const graph = h('div');
     const formulaSelect = h('select', { onchange: async (e) => {
-      formulaSelect.disabled = true;
+      const picker = formulaSelect.nextElementSibling;
+      picker.inert = true;
       try {
         await saveOneRepMaxFormula(e.target.value);
         draw();
@@ -79,12 +80,13 @@ export function renderProgress(root, rerender) {
         formulaSelect.value = S.oneRepMaxFormula;
         toast('Не удалось сохранить формулу 1ПМ');
       } finally {
-        formulaSelect.disabled = false;
+        picker.inert = false;
+        formulaSelect.dispatchEvent(new Event('choice-refresh'));
       }
     } }, Array.from(ONE_REP_MAX_FORMULAS, ([id, formula]) =>
       h('option', { value: id, selected: id === S.oneRepMaxFormula }, formula.label)));
     const formulaControls = h('div', { style: 'margin-top:12px' },
-      h('label', { class: 'field' }, h('span', null, 'Формула 1ПМ'), formulaSelect),
+      choiceField('Формула 1ПМ', formulaSelect),
       h('p', { class: 'sub' }, 'Расчёт по весу и повторам. На подходах с большим числом повторов оценка менее точна.'));
     function draw() {
       const hist = exerciseHistory(ui.ex);
@@ -106,7 +108,7 @@ export function renderProgress(root, rerender) {
       graph.replaceChildren(lineChart(pts, { unit: m.unit }));
     }
     root.append(h('h2', null, 'Сила по упражнению'),
-      h('div', { class: 'card' }, h('label', { class: 'field' }, h('span', null, 'Упражнение'), select),
+      h('div', { class: 'card' }, choiceField('Упражнение', select),
         summary, h('div', { class: 'seg' }, metrics), formulaControls, h('div', { style: 'height:8px' }), graph));
     draw();
   }
@@ -146,7 +148,7 @@ export function renderProgress(root, rerender) {
     function drawBody() {
       holder.replaceChildren(periodChart(null, ui.bodyPeriod, bodyChart));
     }
-    root.append(h('h2', null, 'Тело'), h('div', { class: 'card' }, h('label', { class: 'field' }, h('span', null, 'Измерение'), sel), holder));
+    root.append(h('h2', null, 'Тело'), h('div', { class: 'card' }, choiceField('Измерение', sel), holder));
     drawBody();
   }
 }

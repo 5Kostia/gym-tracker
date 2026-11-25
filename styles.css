@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('fonts/barlow-condensed-bold-italic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   --bg: #0c1320;
   --surface: #182539;
@@ -113,6 +121,10 @@ body.noscroll { overflow: hidden; }
   min-height: 100vh;
 }
 h1 { font-size: 30px; line-height: 1.12; margin: 4px 0 4px; letter-spacing: -0.035em; }
+.home-title {
+  font: italic 700 36px/1.15 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  letter-spacing: .015em; text-transform: uppercase;
+}
 h2 { font-size: 19px; margin: 24px 0 10px; letter-spacing: -0.01em; }
 h3 { font-size: 16px; margin: 0 0 6px; }
 .sub { color: var(--dim); font-size: 14px; margin: 0 0 14px; }
@@ -177,7 +189,20 @@ select {
 }
 label.field { display: block; font-size: 13px; color: var(--dim); margin-bottom: 12px; }
 label.field > :not(span) { margin-top: 5px; }
-label.theme-field { margin-bottom: 0; }
+.choice-field { display: grid; gap: 5px; font-size: 13px; color: var(--dim); margin-bottom: 12px; }
+.choice-field.theme-field { margin-bottom: 0; }
+.choice-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-height: 46px; padding: 10px 12px;
+  font: inherit; font-size: 16px; color: var(--text); text-align: left; overflow-wrap: anywhere;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.choice-option::-webkit-details-marker { display: none; }
+.choice-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.choice-options { display: grid; gap: 5px; padding-top: 5px; }
+.choice-option[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.choice-arrow { flex: 0 0 7px; height: 7px; margin: -4px 3px 0 0; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.choice[open] .choice-arrow { margin-top: 4px; transform: rotate(225deg); }
 input[aria-invalid="true"] { border-color: var(--danger); }
 .field-error { color: var(--danger); }
 

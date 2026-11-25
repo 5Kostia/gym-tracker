@@ -1,5 +1,5 @@
 // Данные: экспорт, импорт, защита от потери, очистка.
-import { h, toast, dialog, confirmDialog, todayStr } from '../util.js';
+import { h, choiceField, toast, dialog, confirmDialog, todayStr } from '../util.js';
 import { S, buildBackup, markBackupDone, parseBackup, applyBackup } from '../store.js';
 import { THEMES, saveTheme } from '../theme.js';
 import { account, login, logout, migrateGuest, reconnect, errorMessage } from '../account.js';
@@ -107,7 +107,7 @@ export function renderData(root, rerender) {
   } }, Array.from(THEMES, ([id, theme]) =>
     h('option', { value: id, selected: id === document.documentElement.dataset.theme }, theme.label)));
   root.append(h('h2', null, 'Оформление'),
-    h('div', { class: 'card' }, h('label', { class: 'field theme-field' }, h('span', null, 'Тема'), themeSelect)));
+    h('div', { class: 'card' }, choiceField('Тема', themeSelect, { className: 'theme-field' })));
   root.append(h('h2', null, 'Сохранить копию'),
     h('p', { class: 'sub' }, 'Создаётся файл JSON. Лучше всего сохранить его в «Файлы» (iCloud Drive) или отправить себе.'),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => shareBackup(rerender) }, 'Сохранить копию'),

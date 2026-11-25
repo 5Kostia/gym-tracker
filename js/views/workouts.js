@@ -1,5 +1,5 @@
 // Список тренировок и редактор тренировки.
-import { h, svg, sheet, confirmDialog, toast, todayStr, fmtDay, fmtVolume, parseDate } from '../util.js';
+import { h, choiceField, svg, sheet, confirmDialog, toast, todayStr, fmtDay, fmtVolume, parseDate } from '../util.js';
 import {
   S, FEELS, EXERCISE_CATEGORIES, newWorkout, saveWorkout, deleteWorkout, workoutVolume, countSets,
   exerciseCatalog, exerciseNameKey, recentExerciseNames, addCustomExercise, lastSetsFor,
@@ -111,7 +111,7 @@ function exerciseForm({ name = '', category = '', submitLabel, save, extra }) {
     }
   } },
   h('label', { class: 'field' }, h('span', null, 'Название'), nameField),
-  h('label', { class: 'field' }, h('span', null, 'Категория'), categoryField),
+  choiceField('Категория', categoryField),
   submit, extra);
 }
 
@@ -406,7 +406,7 @@ export function openEditor(params, onDone) {
       });
       p.setTitle('Своё упражнение');
       p.body.replaceChildren(form);
-      form.querySelector(name.trim() ? 'select' : 'input').focus({ preventScroll: true });
+      form.querySelector(name.trim() ? 'summary' : 'input').focus({ preventScroll: true });
     }
 
     function draw() {

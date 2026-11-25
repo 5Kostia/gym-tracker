@@ -17,6 +17,43 @@ export function h(tag, props, ...kids) {
   return el;
 }
 
+// Keep form validation and change events on the select, with an in-page picker.
+export function choiceField(label, select, { className = '' } = {}) {
+  select.hidden = true;
+  const value = h('span');
+  const summary = h('summary', { class: 'choice-option' }, value, h('span', { class: 'choice-arrow', 'aria-hidden': 'true' }));
+  const buttons = Array.from(select.options, option => option.disabled ? null : h('button', {
+    class: 'choice-option', type: 'button', onclick: () => {
+      select.value = option.value;
+      details.open = false;
+      summary.focus({ preventScroll: true });
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+  }, option.textContent));
+  const details = h('details', { class: 'choice', name: 'gym-tracker-choice' }, summary,
+    h('div', { class: 'choice-options', role: 'group', 'aria-label': label }, buttons));
+  function refresh() {
+    value.textContent = select.selectedOptions[0]?.textContent || 'Выберите вариант';
+    summary.setAttribute('aria-label', label + ': ' + value.textContent);
+    buttons.forEach((button, index) => button?.setAttribute('aria-pressed', String(index === select.selectedIndex)));
+  }
+  select.addEventListener('change', refresh);
+  select.addEventListener('choice-refresh', refresh);
+  select.addEventListener('invalid', event => {
+    event.preventDefault();
+    details.open = true;
+    summary.focus();
+  });
+  details.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !details.open) return;
+    event.stopPropagation();
+    details.open = false;
+    summary.focus();
+  });
+  refresh();
+  return h('div', { class: ('choice-field ' + className).trim() }, h('span', null, label), select, details);
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 export function svg(tag, props, ...kids) {
   const el = document.createElementNS(SVG_NS, tag);

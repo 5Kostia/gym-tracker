@@ -70,7 +70,7 @@ export function renderHome(root, rerender) {
   if (ui.y === null) { const d = new Date(); ui.y = d.getFullYear(); ui.m = d.getMonth(); }
   if (!ui.sel) ui.sel = today;
 
-  root.append(h('h1', null, 'Gym Tracker'),
+  root.append(h('h1', { class: 'home-title' }, 'Gym Tracker'),
     h('p', { class: 'sub' }, new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })));
 
   root.append(h('button', { class: 'btn primary big block', type: 'button',
