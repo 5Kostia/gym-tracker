@@ -2,12 +2,14 @@ import { auth, login, logout, cloudJournal } from './firebase.js';
 import { guestDB, useAccountDatabase } from './db.js';
 import { accountDatabase } from './account-db.js';
 import { loadAll } from './store.js';
+import { prepareJournalWrite } from './journal-record.js';
 
 export { login, logout };
 export const account = { user: null, message: '', ready: false, guestCount: 0 };
 let local, remote, unsubscribe, timer, running = false, server = false, fault = '';
 let incoming = Promise.resolve();
 let channel;
+let invalidRemote = 0;
 const notify = () => window.dispatchEvent(new Event('gym-account'));
 const refresh = async () => { await loadAll(); window.dispatchEvent(new Event('gym-refresh')); };
 async function receive(records) {
@@ -41,14 +43,28 @@ async function flush() {
   if (running || !sameUser()) return;
   running = true;
   try {
-    let batch;
     while (sameUser()) {
-      batch = await local.pending();
       if (!navigator.onLine) { status('Без интернета · изменения сохраняются на устройстве'); break; }
       if (fault || !server) { status(fault || 'Подключение к облаку…'); break; }
-      if (!batch.length) { status('Сохранено в облаке'); break; }
+      const batch = [];
+      let bytes = 0;
+      let invalidLocal = 0;
+      for (const row of await local.pending()) {
+        const record = prepareJournalWrite(row);
+        if (!record) { invalidLocal++; continue; }
+        if (batch.length === 20 || bytes + record.bytes > 4_000_000) break;
+        batch.push(record);
+        bytes += record.bytes;
+      }
+      if (!batch.length) {
+        const messages = [invalidLocal || invalidRemote ? 'Синхронизация завершена с ошибками' : 'Сохранено в облаке'];
+        if (invalidRemote) messages.push('Пропущено повреждённых записей в облаке: ' + invalidRemote);
+        if (invalidLocal) messages.push('Записей с ошибками, оставшихся на устройстве: ' + invalidLocal);
+        status(messages.join(' · '));
+        break;
+      }
       status('Синхронизация…');
-      const winners = await remote.push(batch.slice(0, 20));
+      const winners = await remote.push(batch);
       if (!sameUser()) break;
       await receive(winners);
     }
@@ -82,11 +98,12 @@ export async function reconnect() {
       status(fault);
       scheduleRetry(error);
     };
-    unsubscribe = remote.watch((records, fromServer) => {
+    unsubscribe = remote.watch((records, fromServer, invalidCount) => {
       incoming = incoming.then(async () => {
         if (version !== watchVersion || !sameUser()) return;
         await receive(records);
         server = fromServer;
+        if (fromServer) invalidRemote = invalidCount;
         schedule(0);
       }).catch(fail);
     }, fail);

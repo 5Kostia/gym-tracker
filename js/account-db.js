@@ -1,4 +1,5 @@
 import { open, STORES } from './db.js';
+import { validJournalValue } from './journal-record.js';
 
 const TABLE = 'accountRecords';
 const keys = { workouts: 'id', measurements: 'id', exercises: 'name', meta: 'key' };
@@ -53,8 +54,12 @@ export function accountDatabase(uid) {
     }
   });
   return {
-    all: group => transaction('readonly', async s => (await rows(s, group)).filter(r => r.value !== null).map(r => r.value)),
-    get: (group, key) => transaction('readonly', async s => (await get(s, group, key))?.value),
+    all: group => transaction('readonly', async s => (await rows(s, group))
+      .filter(r => r.value !== null && validJournalValue(group, r.key, r.value)).map(r => r.value)),
+    get: (group, key) => transaction('readonly', async s => {
+      const row = await get(s, group, key);
+      return row && validJournalValue(group, key, row.value) ? row.value : undefined;
+    }),
     put: (group, value) => write(s => change(s, group, value[keys[group]], value)),
     del: (group, key) => write(s => change(s, group, key, null)),
     delMany: (group, ids) => write(async s => { for (const id of ids) await change(s, group, id, null); }),
@@ -65,11 +70,11 @@ export function accountDatabase(uid) {
     receive: records => transaction('readwrite', async s => {
       let changed = false;
       for (const { group, key, value, rev } of records) {
-        if (!STORES.includes(group) || typeof key !== 'string' || typeof rev !== 'string' ||
-            (value !== null && value?.[keys[group]] !== key)) continue;
+        if (typeof rev !== 'string' || !validJournalValue(group, key, value)) continue;
         const old = await get(s, group, key);
-        if (old && (old.rev > rev || (old.rev === rev && !old.pending))) continue;
-        changed ||= old?.rev !== rev;
+        const alreadyValid = old && validJournalValue(group, key, old.value);
+        if (alreadyValid && (old.rev > rev || (old.rev === rev && !old.pending))) continue;
+        changed ||= !alreadyValid || old.rev !== rev;
         await read(s.put({ uid, group, key, value, rev, pending: 0 }));
       }
       return changed;
