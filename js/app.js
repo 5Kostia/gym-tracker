@@ -7,6 +7,7 @@ import { renderWorkouts } from './views/workouts.js';
 import { renderMeasures } from './views/measures.js';
 import { renderProgress } from './views/progress.js';
 import { renderData } from './views/data.js';
+import { renderCalculator } from './views/calculator.js';
 import { prepareAccount, startSync } from './account.js';
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'workouts', label: 'Тренировки', render: renderWorkouts },
   { id: 'measures', label: 'Замеры', icon: 'M3 16.5 16.5 3 21 7.5 7.5 21zM6.5 13l2 2m1-5 2.4 2.4M12.5 7l2 2', render: renderMeasures },
   { id: 'progress', label: 'Прогресс', icon: 'M6 19v-6M12 19V9M18 19V5', render: renderProgress },
+  { id: 'calculator', label: 'Калькулятор', icon: 'M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 8h8M9 12h.01m6 0h.01M9 16h.01m6 0h.01', render: renderCalculator },
   { id: 'data', label: 'Аккаунт', icon: 'M16 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-1a8 5 0 0 1 16 0v1', render: renderData },
 ];
 
