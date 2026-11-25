@@ -37,8 +37,9 @@ export function renderMeasures(root, rerender) {
         toast(n === 1 ? 'Замер сохранён' : `Сохранено замеров: ${n}`);
         rerender();
       } }, 'Сохранить замеры')),
-    h('div', { style: 'margin-top:8px' },
-      h('button', { class: 'btn ghost small', type: 'button', onclick: () => addTypeDialog(rerender) }, '＋ Своё измерение'))));
+    h('div', { class: 'custom-item-actions' },
+      h('button', { class: 'btn small block', type: 'button', onclick: () => addTypeDialog(rerender) }, '＋ Своё измерение'),
+      h('button', { class: 'btn small block', type: 'button', onclick: () => openCustomMeasurements(rerender) }, 'Мои измерения'))));
 
   root.append(h('h2', null, 'История'));
   const list = h('div', { class: 'card' });
@@ -55,6 +56,20 @@ export function renderMeasures(root, rerender) {
       h('div', { style: 'text-align:right' }, h('div', { class: 'num', style: 'font-weight:700' }, last ? `${fmtNum(last.value)} ${t.unit}` : '–'), delta)));
   }
   root.append(list);
+}
+
+function openCustomMeasurements(rerender) {
+  const p = sheet({ title: 'Мои измерения' });
+  const refresh = () => { rerender(); draw(); };
+  function draw() {
+    const types = S.measureTypes.filter(t => !t.builtin);
+    p.body.replaceChildren(types.length
+      ? h('div', { class: 'card' }, types.map(t =>
+        h('button', { class: 'list-row', type: 'button', onclick: () => openType(t, refresh) },
+          h('span', null, t.name), h('span', { class: 'muted' }, t.unit))))
+      : h('div', { class: 'empty small' }, 'Своих измерений пока нет'));
+  }
+  draw();
 }
 
 function addTypeDialog(rerender, existing) {
@@ -85,12 +100,6 @@ function openType(t, rerender) {
   const draw = () => {
     p.body.replaceChildren();
     const arr = measurementsOfType(t.name);
-    p.body.append(lineChart(arr.map((m) => ({ x: m.date, y: m.value })), { unit: t.unit }));
-    if (!arr.length) { p.body.append(h('div', { class: 'empty small' }, 'Замеров пока нет')); }
-    const card = h('div', { class: 'card', style: 'margin-top:12px' });
-    [...arr].reverse().forEach((m) => card.append(h('button', { class: 'list-row', type: 'button', onclick: () => editEntry(m, t, draw) },
-      h('span', null, fmtDate(m.date)), h('b', { class: 'num' }, `${fmtNum(m.value)} ${t.unit}`))));
-    if (arr.length) p.body.append(card);
     if (!t.builtin) {
       p.body.append(h('div', { class: 'custom-item-actions' },
         h('button', { class: 'btn block', type: 'button', onclick: () => addTypeDialog(p.close, t) }, 'Переименовать измерение'),
@@ -107,6 +116,14 @@ function openType(t, rerender) {
           } finally { currentTarget.disabled = false; }
         } }, 'Удалить измерение')));
     }
+    if (!arr.length) {
+      p.body.append(h('div', { class: 'empty small' }, 'Замеров пока нет'));
+      return;
+    }
+    p.body.append(lineChart(arr.map(m => ({ x: m.date, y: m.value })), { unit: t.unit }),
+      h('div', { class: 'card' }, [...arr].reverse().map(m =>
+        h('button', { class: 'list-row', type: 'button', onclick: () => editEntry(m, t, draw) },
+          h('span', null, fmtDate(m.date)), h('b', { class: 'num' }, `${fmtNum(m.value)} ${t.unit}`)))));
   };
   draw();
 }
