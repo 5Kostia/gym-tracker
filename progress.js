@@ -1,10 +1,11 @@
 // Прогресс: рекорды, графики силы, объём, динамика тела.
-import { h, fmtNum, fmtDate, fmtShort, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
+import { h, fmtNum, fmtDate, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
 import { S, exerciseHistory, personalRecords, workoutVolume, measurementsOfType, measureUnit,
   ONE_REP_MAX_FORMULAS, saveOneRepMaxFormula } from '../store.js';
-import { lineChart, barChart } from '../charts.js';
+import { lineChart } from '../charts.js';
+import { periodChart, shiftMonth, withinPeriod } from './progress-period.js';
 
-const ui = { ex: null, metric: 'maxW', body: null };
+const ui = { ex: null, metric: 'maxW', body: null, volumePeriod: {}, bodyPeriod: {} };
 
 const METRICS = [
   { key: 'maxW', label: 'Вес', unit: 'кг' },
@@ -37,9 +38,26 @@ export function renderProgress(root, rerender) {
       h('div', { class: 'stat' }, h('b', null, fmtVolume(vWeek)), h('span', null, 'за неделю')),
       h('div', { class: 'stat' }, h('b', null, fmtVolume(vMonth)), h('span', null, 'за месяц')),
       h('div', { class: 'stat' }, h('b', null, fmtVolume(vAll)), h('span', null, 'за всё время'))));
-  const recent = S.workouts.filter((w) => workoutVolume(w) > 0).slice(0, 14).reverse();
-  root.append(h('div', { class: 'card' }, h('div', { class: 'muted', style: 'font-size:13px;margin-bottom:6px' }, 'Объём последних тренировок, кг'),
-    barChart(recent.map((w) => ({ x: w.date, y: workoutVolume(w) })), { unit: 'кг' })));
+  root.append(h('div', { class: 'card' }, periodChart('Объём последних тренировок, кг', ui.volumePeriod, (from, to) => {
+    const monthly = from !== to;
+    const totals = new Map();
+    for (const w of S.workouts) {
+      if (!withinPeriod(w.date, from, to)) continue;
+      const volume = workoutVolume(w);
+      if (volume <= 0) continue;
+      const key = monthly ? w.date.slice(0, 7) + '-01' : w.date;
+      totals.set(key, (totals.get(key) || 0) + volume);
+    }
+    if (monthly && totals.size) {
+      for (let month = from; month <= to; month = shiftMonth(month, 1)) {
+        const date = month + '-01';
+        if (!totals.has(date)) totals.set(date, 0);
+      }
+    }
+    const points = [...totals].sort(([a], [b]) => a.localeCompare(b)).map(([x, y]) => ({ x, y }));
+    return h('div', null, monthly ? h('p', { class: 'sub period-note' }, 'Сумма за каждый месяц') : null,
+      lineChart(points, { unit: 'кг', monthly }));
+  })));
 
   // ---- упражнение ----
   const names = [...new Set(S.workouts.flatMap((w) => w.exercises.filter((e) => e.sets.length).map((e) => e.name)))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -109,16 +127,24 @@ export function renderProgress(root, rerender) {
     const holder = h('div');
     const sel = h('select', { 'aria-label': 'Измерение', onchange: (e) => { ui.body = e.target.value; drawBody(); } },
       types.map((t) => h('option', { value: t.name, selected: t.name === ui.body }, t.name)));
-    function drawBody() {
-      const arr = measurementsOfType(ui.body);
+    function bodyChart(from, to) {
+      const arr = measurementsOfType(ui.body).filter(m => withinPeriod(m.date, from, to));
       const unit = measureUnit(ui.body);
+      const monthly = from !== to;
+      if (!arr.length) return lineChart([]);
+      const values = new Map();
+      for (const m of arr) values.set(monthly ? m.date.slice(0, 7) + '-01' : m.date, m.value);
       const first = arr[0], last = arr[arr.length - 1];
       const diff = Math.round((last.value - first.value) * 100) / 100;
-      holder.replaceChildren(
-        h('p', { class: 'sub', style: 'margin-top:8px' }, arr.length > 1
-          ? `С ${fmtShort(first.date)}: ${diff > 0 ? '+' : ''}${fmtNum(diff)} ${unit} (сейчас ${fmtNum(last.value)} ${unit})`
+      return h('div', null,
+        h('p', { class: 'sub period-note' }, arr.length > 1
+          ? `${fmtDate(first.date)} — ${fmtDate(last.date)}: ${diff > 0 ? '+' : ''}${fmtNum(diff)} ${unit} (последний замер: ${fmtNum(last.value)} ${unit})`
           : `Один замер: ${fmtNum(last.value)} ${unit}`),
-        lineChart(arr.map((m) => ({ x: m.date, y: m.value })), { unit }));
+        monthly ? h('p', { class: 'sub period-note' }, 'По последнему замеру каждого месяца') : null,
+        lineChart([...values].map(([x, y]) => ({ x, y })), { unit, monthly }));
+    }
+    function drawBody() {
+      holder.replaceChildren(periodChart(null, ui.bodyPeriod, bodyChart));
     }
     root.append(h('h2', null, 'Тело'), h('div', { class: 'card' }, h('label', { class: 'field' }, h('span', null, 'Измерение'), sel), holder));
     drawBody();

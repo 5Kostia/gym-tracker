@@ -120,6 +120,7 @@ export function openEditor(params, onDone) {
   let deleted = false;
   let timer = null;
   let saving = Promise.resolve();
+  let savedContent = existing ? JSON.stringify(w) : null;
   const cardioFields = new Map();
 
   function hasContent() {
@@ -129,9 +130,11 @@ export function openEditor(params, onDone) {
     clearTimeout(timer);
     if (deleted) return saving;
     if (!stored && !hasContent()) return saving;
-    const snapshot = JSON.parse(JSON.stringify(w));
+    const content = JSON.stringify(w);
     const pending = saving.then(async () => {
-      await saveWorkout(snapshot);
+      if (content === savedContent) return;
+      await saveWorkout(JSON.parse(content));
+      savedContent = content;
       stored = true;
     });
     saving = pending.catch(() => {});
@@ -350,8 +353,8 @@ export function openEditor(params, onDone) {
       }
       for (const { id, label } of EXERCISE_CATEGORIES) {
         const entries = catalog.filter((entry) => entry.category === id && exerciseNameKey(entry.name).includes(q));
-        if (entries.length) list.append(h('details', { class: 'pick-group', 'data-category': id, open: Boolean(q) },
-          h('summary', null, label), h('div', { class: 'pick-group-items' }, entries.map(exerciseButton))));
+        if (entries.length) list.append(h('section', { class: 'pick-group', 'data-category': id },
+          h('h3', { class: 'pick-title' }, label), h('div', { class: 'pick-group-items' }, entries.map(exerciseButton))));
       }
       if (!byName.has(q)) list.append(h('button', { class: 'new', type: 'button', onclick: () => createExercise(search.value) },
         q ? `＋ Создать «${search.value.trim()}»` : '＋ Своё упражнение'));

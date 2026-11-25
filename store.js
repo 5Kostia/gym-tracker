@@ -66,7 +66,7 @@ export async function loadAll() {
     S.measureTypes = mt.value;
   } else {
     S.measureTypes = DEFAULT_MEASURES.map((x) => ({ ...x }));
-    await DB.put('meta', { key: 'measureTypes', value: S.measureTypes });
+    // Defaults are derived until the user customizes them.
   }
 }
 

@@ -2,6 +2,51 @@
 import { h, toast, dialog, confirmDialog, todayStr } from '../util.js';
 import { S, buildBackup, markBackupDone, parseBackup, applyBackup, wipeAll } from '../store.js';
 import { THEMES, saveTheme } from '../theme.js';
+import { account, login, logout, migrateGuest, reconnect, errorMessage } from '../account.js';
+
+let updateAccountPanel;
+window.addEventListener('gym-account', () => updateAccountPanel?.());
+
+function accountPanel() {
+  const card = h('section', { class: 'card account-card', 'aria-label': 'Облачное сохранение' });
+  const title = h('strong', null, account.user?.email || 'Вход через Google');
+  const state = h('p', { class: 'sub', role: 'status' });
+  const action = (label, fn, primary = false) => h('button', {
+    class: 'btn block' + (primary ? ' primary' : ''), type: 'button',
+    onclick: async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try { await fn(); } catch (error) { toast(error.code ? errorMessage(error) : error.message); }
+      finally { button.disabled = false; }
+    },
+  }, label);
+  card.append(title, state);
+  if (!account.user) {
+    state.textContent = 'Войди, чтобы сохранять тренировки и замеры в облаке.';
+    card.append(action('Войти через Google', login, true));
+    return card;
+  }
+  const transfer = action('Перенести записи с устройства', async () => {
+    if (await confirmDialog('Перенести записи гостевого дневника в ' + account.user.email +
+      '? После переноса они будут доступны в этом аккаунте.', 'Перенести')) await migrateGuest();
+  }, true);
+  const retry = action('Подключиться снова', reconnect);
+  const signout = action('Выйти из аккаунта', async () => {
+    if (await confirmDialog('Выйти из ' + account.user.email +
+      '? Если есть неотправленные изменения, они дождутся следующего входа в этот аккаунт на этом устройстве.', 'Выйти')) await logout();
+  });
+  card.append(transfer, retry, signout);
+  function update() {
+    state.textContent = account.message || 'Подключение к облаку…';
+    transfer.hidden = !account.guestCount;
+    transfer.disabled = !account.ready;
+    retry.hidden = account.ready || !navigator.onLine;
+  }
+  update();
+  // Only the current panel receives updates, so a status change never resets a form.
+  updateAccountPanel = () => { if (card.isConnected) update(); };
+  return card;
+}
 
 function makeFile() {
   const json = JSON.stringify(buildBackup(), null, 2);
@@ -48,12 +93,15 @@ async function importFile(file, rerender) {
     { label: 'Отмена', value: null, kind: 'ghost' },
   ], 'Импорт копии');
   if (!mode) return;
-  if (mode === 'replace' && !(await confirmDialog('Все текущие данные на этом устройстве будут удалены и заменены данными из файла. Продолжить?', 'Заменить', true))) return;
+  if (mode === 'replace' && account.user && !account.ready) { toast('Для замены данных аккаунта дождись соединения с облаком'); return; }
+  const target = account.user ? 'в аккаунте ' + account.user.email : 'на этом устройстве';
+  if (mode === 'replace' && !(await confirmDialog('Заменить текущие данные ' + target + ' данными из файла?', 'Заменить', true))) return;
   try { await applyBackup(parsed, mode); toast('Данные загружены'); rerender(); } catch (e) { console.error(e); toast('Ошибка импорта: ничего не изменено'); }
 }
 
 export function renderData(root, rerender) {
-  root.append(h('h1', null, 'Данные'));
+  root.append(h('h1', null, 'Аккаунт'));
+  root.append(accountPanel());
   const themeSelect = h('select', { onchange: (event) => {
     try { saveTheme(event.target.value); } catch { toast('Не удалось запомнить выбранную тему'); }
   } }, Array.from(THEMES, ([id, theme]) =>
@@ -79,7 +127,9 @@ export function renderData(root, rerender) {
 
   root.append(h('h2', null, 'Опасная зона'),
     h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
-      if (!(await confirmDialog('Удалить ВСЕ тренировки и замеры на этом устройстве? Это нельзя отменить. Сначала сохраните резервную копию.', 'Удалить всё', true))) return;
+      if (account.user && !account.ready) { toast('Для удаления данных аккаунта дождись соединения с облаком'); return; }
+      const target = account.user ? 'из аккаунта ' + account.user.email + ' на всех устройствах' : 'на этом устройстве';
+      if (!(await confirmDialog('Удалить все тренировки и замеры ' + target + '?', 'Удалить всё', true))) return;
       if (!(await confirmDialog('Точно удалить все данные?', 'Да, удалить', true))) return;
       await wipeAll(); toast('Все данные удалены'); rerender();
     } }, 'Удалить все данные'));
