@@ -44,6 +44,7 @@ export const S = {
   workouts: [],          // новые сверху
   measurements: [],
   customExercises: [],
+  hiddenExercises: [],
   measureTypes: [],
   lastBackup: null,      // ISO-строка или null
   oneRepMaxFormula: DEFAULT_ONE_REP_MAX_FORMULA,
@@ -59,7 +60,8 @@ export async function loadAll() {
   ]);
   S.workouts = w.map(moveLegacyCardio).sort(byDateDesc);
   S.measurements = m;
-  S.customExercises = e.map(({ name, category }) => ({ name, category: categoryIds.has(category) ? category : 'general' }));
+  S.customExercises = e.filter(item => !item.hidden).map(({ name, category }) => ({ name, category: categoryIds.has(category) ? category : 'general' }));
+  S.hiddenExercises = e.filter(item => item.hidden).map(({ name }) => name);
   S.lastBackup = lb ? lb.value : null;
   S.oneRepMaxFormula = ONE_REP_MAX_FORMULAS.has(formula?.value) ? formula.value : DEFAULT_ONE_REP_MAX_FORMULA;
   if (mt && Array.isArray(mt.value) && mt.value.length) {
@@ -133,9 +135,10 @@ export function exerciseCatalog() {
   };
   defaultExercises.forEach(add);
   S.customExercises.forEach(add);
+  const hidden = new Set(S.hiddenExercises.map(exerciseNameKey));
   for (const workout of S.workouts) {
     for (const exercise of workout.exercises) {
-      add({ name: exercise.name, category: exercise.kind === 'cardio' ? 'cardio' : 'general' });
+      if (!hidden.has(exerciseNameKey(exercise.name))) add({ name: exercise.name, category: exercise.kind === 'cardio' ? 'cardio' : 'general' });
     }
   }
   return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -157,8 +160,30 @@ export async function addCustomExercise(name, category) {
 
   const entry = { name, category };
   await DB.put('exercises', entry);
+  S.hiddenExercises = S.hiddenExercises.filter(old => old !== name);
   S.customExercises.push(entry);
   return entry;
+}
+
+export async function renameCustomExercise(oldName, name) {
+  const entry = S.customExercises.find(item => item.name === oldName);
+  name = name.trim().replace(/\s+/g, ' ');
+  const oldKey = exerciseNameKey(oldName);
+  const key = exerciseNameKey(name);
+  if (!entry || !key || exerciseCatalog().some(item => exerciseNameKey(item.name) === key && key !== oldKey)) return false;
+  if (name === oldName) return true;
+  const workouts = S.workouts.filter(w => w.exercises.some(ex => exerciseNameKey(ex.name) === oldKey))
+    .map(w => ({ ...w, updatedAt: Date.now(), exercises: w.exercises.map(ex => exerciseNameKey(ex.name) === oldKey ? { ...ex, name } : ex) }));
+  await DB.bulk({ workouts, exercises: [{ ...entry, name }] }, false, { exercises: [oldName] });
+  await loadAll();
+  return true;
+}
+
+export async function removeCustomExercise(name) {
+  if (!S.customExercises.some(item => item.name === name)) return;
+  // Keep recorded workouts and prevent their names from repopulating the picker.
+  await DB.put('exercises', { name, hidden: true });
+  await loadAll();
 }
 
 // Подходы этого упражнения из последней прошлой тренировки (для подсказки «в прошлый раз»)
@@ -239,16 +264,29 @@ export async function addMeasureType(name, unit) {
   name = name.trim(); unit = (unit || '').trim();
   if (!name) return false;
   if (S.measureTypes.some((t) => t.name.toLowerCase() === name.toLowerCase())) return false;
-  S.measureTypes.push({ name, unit: unit || 'см' });
-  await DB.put('meta', { key: 'measureTypes', value: S.measureTypes });
+  const types = [...S.measureTypes, { name, unit: unit || 'см' }];
+  await DB.put('meta', { key: 'measureTypes', value: types });
+  S.measureTypes = types;
   return true;
 }
 export async function removeMeasureType(name) {
-  S.measureTypes = S.measureTypes.filter((t) => t.name !== name);
+  if (!S.measureTypes.some(t => t.name === name && !t.builtin)) return;
+  const types = S.measureTypes.filter(t => t.name !== name);
   const ids = S.measurements.filter((m) => m.type === name).map((m) => m.id);
-  await DB.put('meta', { key: 'measureTypes', value: S.measureTypes });
-  await DB.delMany('measurements', ids);
-  S.measurements = S.measurements.filter((m) => m.type !== name);
+  await DB.bulk({ meta: [{ key: 'measureTypes', value: types }] }, false, { measurements: ids });
+  await loadAll();
+}
+
+export async function renameMeasureType(oldName, name) {
+  name = name.trim();
+  if (!name || !S.measureTypes.some(t => t.name === oldName && !t.builtin) ||
+      S.measureTypes.some(t => t.name !== oldName && t.name.toLowerCase() === name.toLowerCase())) return false;
+  if (name === oldName) return true;
+  const types = S.measureTypes.map(t => t.name === oldName ? { ...t, name } : t);
+  const measurements = S.measurements.filter(m => m.type === oldName).map(m => ({ ...m, type: name }));
+  await DB.bulk({ measurements, meta: [{ key: 'measureTypes', value: types }] }, false);
+  await loadAll();
+  return true;
 }
 
 // ---------- резервная копия ----------
@@ -260,6 +298,7 @@ export function buildBackup() {
     workouts: S.workouts,
     measurements: S.measurements,
     exercises: S.customExercises.map(({ name }) => name),
+    hiddenExercises: S.hiddenExercises,
     exerciseCategories: Object.fromEntries(S.customExercises.map(({ name, category }) => [name, category])),
     measureTypes: S.measureTypes,
   };
@@ -318,7 +357,9 @@ export function parseBackup(text) {
   const measureTypes = Array.isArray(d.measureTypes)
     ? d.measureTypes.filter((t) => t && typeof t.name === 'string' && t.name.trim()).map((t) => ({ name: t.name, unit: typeof t.unit === 'string' ? t.unit : '', builtin: !!t.builtin }))
     : [];
-  return { workouts, measurements, exercises, measureTypes };
+  const hiddenExercises = Array.isArray(d.hiddenExercises)
+    ? d.hiddenExercises.filter(name => typeof name === 'string' && name.trim()) : [];
+  return { workouts, measurements, exercises, hiddenExercises, measureTypes };
 }
 
 // mode: 'replace' — заменить всё, 'merge' — добавить к существующему (записи с тем же id перезаписываются)
@@ -341,13 +382,11 @@ export async function applyBackup(parsed, mode) {
   await DB.bulk({
     workouts: parsed.workouts,
     measurements: parsed.measurements,
-    exercises: parsed.exercises.map(({ name, category }) => ({ name, category: category || categories.get(name) || 'general' })),
+    exercises: [
+      ...(parsed.hiddenExercises || []).filter(name => !categories.has(name)).map(name => ({ name, hidden: true })),
+      ...parsed.exercises.map(({ name, category }) => ({ name, category: category || categories.get(name) || 'general' })),
+    ],
     meta,
   }, mode === 'replace');
-  await loadAll();
-}
-
-export async function wipeAll() {
-  await DB.wipe();
   await loadAll();
 }

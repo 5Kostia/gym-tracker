@@ -46,8 +46,11 @@ export function accountDatabase(uid) {
     }
     for (const [key, value] of byKey) await change(s, group, key, value);
   }
-  const bulk = (data, replace) => write(async s => {
-    for (const group of STORES) await replaceGroup(s, group, data[group] || [], replace);
+  const bulk = (data, replace, deletes = {}) => write(async s => {
+    for (const group of STORES) {
+      for (const key of deletes[group] || []) await change(s, group, key, null);
+      await replaceGroup(s, group, data[group] || [], replace);
+    }
   });
   return {
     all: group => transaction('readonly', async s => (await rows(s, group)).filter(r => r.value !== null).map(r => r.value)),

@@ -66,11 +66,12 @@ export const guestDB = {
   // Записать/заменить сразу несколько хранилищ одной транзакцией.
   // data: { workouts: [...], measurements: [...], exercises: [...], meta: [...] }
   // Если replace = true, перед записью хранилища очищаются. Если что-то пошло не так, не меняется ничего.
-  bulk: (data, replace) => open().then((db) => new Promise((resolve, reject) => {
+  bulk: (data, replace, deletes = {}) => open().then((db) => new Promise((resolve, reject) => {
     const t = db.transaction(STORES, 'readwrite');
     for (const name of STORES) {
       const s = t.objectStore(name);
       if (replace) s.clear();
+      for (const key of deletes[name] || []) s.delete(key);
       for (const item of data[name] || []) s.put(item);
     }
     t.oncomplete = () => resolve();

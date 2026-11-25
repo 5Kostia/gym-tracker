@@ -3,6 +3,7 @@ import { h, svg, sheet, confirmDialog, toast, todayStr, fmtDay, fmtVolume, parse
 import {
   S, FEELS, EXERCISE_CATEGORIES, newWorkout, saveWorkout, deleteWorkout, workoutVolume, countSets,
   exerciseCatalog, exerciseNameKey, recentExerciseNames, addCustomExercise, lastSetsFor,
+  renameCustomExercise, removeCustomExercise,
 } from '../store.js';
 
 function formatCardioDuration(total) {
@@ -90,11 +91,51 @@ export function workoutCard(w, onOpen) {
     w.notes ? h('div', { class: 'meta' }, '📝 ' + (w.notes.length > 80 ? w.notes.slice(0, 80) + '…' : w.notes)) : null);
 }
 
+function manageExercises(rerender) {
+  const manager = sheet({ title: 'Свои упражнения', onClose: () => rerender() });
+  function draw() {
+    const exercises = [...S.customExercises].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    manager.body.replaceChildren(exercises.length ? h('div', { class: 'card' }, exercises.map(exercise =>
+      h('button', { class: 'list-row', type: 'button', onclick: () => edit(exercise) },
+        h('span', null, exercise.name), h('span', { class: 'muted' }, EXERCISE_CATEGORIES.find(item => item.id === exercise.category)?.label))))
+      : h('div', { class: 'empty small' }, 'Своих упражнений пока нет'));
+  }
+  function edit(exercise) {
+    const editor = sheet({ title: 'Своё упражнение' });
+    const name = h('input', { type: 'text', value: exercise.name, autocomplete: 'off', required: true });
+    const save = async (action, message) => {
+      editor.box.inert = true;
+      try {
+        if (await action() === false) { toast('Такое упражнение уже есть или название пустое'); return; }
+        toast(message);
+        await editor.close();
+        draw();
+      } catch (error) {
+        console.error(error);
+        toast('Не удалось изменить упражнение');
+      } finally { editor.box.inert = false; }
+    };
+    editor.body.append(h('form', { class: 'custom-item-actions', onsubmit: event => {
+      event.preventDefault();
+      save(() => renameCustomExercise(exercise.name, name.value), 'Название сохранено');
+    } },
+    h('label', { class: 'field' }, h('span', null, 'Название'), name),
+    h('button', { class: 'btn primary block', type: 'submit' }, 'Сохранить название'),
+    h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
+      if (await confirmDialog(`Убрать «${exercise.name}» из списка упражнений? Записанные тренировки сохранятся.`, 'Убрать', true)) {
+        await save(() => removeCustomExercise(exercise.name), 'Упражнение убрано из списка');
+      }
+    } }, 'Удалить из списка')));
+  }
+  draw();
+}
+
 export function renderWorkouts(root, rerender) {
   root.append(
     h('h1', null, 'Тренировки'),
     h('p', { class: 'sub' }, 'История всех тренировок. Нажмите на карточку, чтобы изменить или удалить.'),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => openEditor({ date: todayStr() }, rerender) }, '＋ Новая тренировка'));
+  root.append(h('button', { class: 'btn ghost block', type: 'button', onclick: () => manageExercises(rerender) }, 'Свои упражнения'));
 
   if (!S.workouts.length) {
     root.append(h('div', { class: 'empty' }, 'Пока нет ни одной тренировки. Нажмите «Новая тренировка», чтобы записать упражнения или кардио.'));

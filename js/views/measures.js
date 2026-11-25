@@ -1,6 +1,6 @@
 // Замеры тела: ввод нескольких значений сразу, история по каждому типу.
-import { h, sheet, dialog, confirmDialog, toast, todayStr, fmtDate, fmtShort, fmtNum, num, uid } from '../util.js';
-import { S, saveMeasurement, deleteMeasurement, measurementsOfType, addMeasureType, removeMeasureType, loadAll } from '../store.js';
+import { h, sheet, confirmDialog, toast, todayStr, fmtDate, fmtShort, fmtNum, num, uid } from '../util.js';
+import { S, saveMeasurement, deleteMeasurement, measurementsOfType, addMeasureType, removeMeasureType, renameMeasureType } from '../store.js';
 import { lineChart } from '../charts.js';
 
 export function renderMeasures(root, rerender) {
@@ -57,18 +57,26 @@ export function renderMeasures(root, rerender) {
   root.append(list);
 }
 
-async function addTypeDialog(rerender) {
-  const p = sheet({ title: 'Новое измерение' });
-  const name = h('input', { type: 'text', placeholder: 'Например, Шея', autocomplete: 'off', maxlength: '40' });
+function addTypeDialog(rerender, existing) {
+  const p = sheet({ title: existing ? 'Переименовать измерение' : 'Новое измерение' });
+  const name = h('input', { type: 'text', placeholder: 'Например, Шея', value: existing?.name || '', autocomplete: 'off', maxlength: '40' });
   const unit = h('input', { type: 'text', placeholder: 'см', value: 'см', maxlength: '10' });
   p.body.append(
     h('label', { class: 'field' }, h('span', null, 'Название'), name),
-    h('label', { class: 'field' }, h('span', null, 'Единица'), unit),
-    h('button', { class: 'btn primary block', type: 'button', onclick: async () => {
-      const ok = await addMeasureType(name.value, unit.value);
-      if (!ok) { toast(name.value.trim() ? 'Такое измерение уже есть' : 'Введите название'); return; }
-      toast('Измерение добавлено'); p.close(); rerender();
-    } }, 'Добавить'));
+    existing ? null : h('label', { class: 'field' }, h('span', null, 'Единица'), unit),
+    h('button', { class: 'btn primary block', type: 'button', onclick: async ({ currentTarget }) => {
+      currentTarget.disabled = true;
+      try {
+        const ok = existing ? await renameMeasureType(existing.name, name.value) : await addMeasureType(name.value, unit.value);
+        if (!ok) { toast(name.value.trim() ? 'Такое измерение уже есть' : 'Введите название'); return; }
+        toast(existing ? 'Название сохранено' : 'Измерение добавлено');
+        await p.close();
+        await rerender();
+      } catch (error) {
+        console.error(error);
+        toast('Не удалось сохранить измерение');
+      } finally { currentTarget.disabled = false; }
+    } }, existing ? 'Сохранить название' : 'Добавить'));
   setTimeout(() => name.focus(), 80);
 }
 
@@ -84,10 +92,20 @@ function openType(t, rerender) {
       h('span', null, fmtDate(m.date)), h('b', { class: 'num' }, `${fmtNum(m.value)} ${t.unit}`))));
     if (arr.length) p.body.append(card);
     if (!t.builtin) {
-      p.body.append(h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
-        if (!(await confirmDialog(`Удалить измерение «${t.name}» вместе со всеми его записями?`, 'Удалить', true))) return;
-        await removeMeasureType(t.name); toast('Измерение удалено'); p.close();
-      } }, 'Удалить измерение'));
+      p.body.append(h('div', { class: 'custom-item-actions' },
+        h('button', { class: 'btn block', type: 'button', onclick: () => addTypeDialog(p.close, t) }, 'Переименовать измерение'),
+        h('button', { class: 'btn danger block', type: 'button', onclick: async ({ currentTarget }) => {
+          if (!(await confirmDialog(`Удалить измерение «${t.name}» вместе со всеми его записями?`, 'Удалить', true))) return;
+          currentTarget.disabled = true;
+          try {
+            await removeMeasureType(t.name);
+            toast('Измерение удалено');
+            await p.close();
+          } catch (error) {
+            console.error(error);
+            toast('Не удалось удалить измерение');
+          } finally { currentTarget.disabled = false; }
+        } }, 'Удалить измерение')));
     }
   };
   draw();

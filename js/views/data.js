@@ -1,6 +1,6 @@
 // Данные: экспорт, импорт, защита от потери, очистка.
 import { h, toast, dialog, confirmDialog, todayStr } from '../util.js';
-import { S, buildBackup, markBackupDone, parseBackup, applyBackup, wipeAll } from '../store.js';
+import { S, buildBackup, markBackupDone, parseBackup, applyBackup } from '../store.js';
 import { THEMES, saveTheme } from '../theme.js';
 import { account, login, logout, migrateGuest, reconnect, errorMessage } from '../account.js';
 
@@ -124,13 +124,4 @@ export function renderData(root, rerender) {
   root.append(h('h2', null, 'О приложении'),
     h('div', { class: 'card' },
       h('p', { style: 'margin:0' }, `Сейчас записей: тренировок — ${S.workouts.length}, замеров — ${S.measurements.length}.`)));
-
-  root.append(h('h2', null, 'Опасная зона'),
-    h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
-      if (account.user && !account.ready) { toast('Для удаления данных аккаунта дождись соединения с облаком'); return; }
-      const target = account.user ? 'из аккаунта ' + account.user.email + ' на всех устройствах' : 'на этом устройстве';
-      if (!(await confirmDialog('Удалить все тренировки и замеры ' + target + '?', 'Удалить всё', true))) return;
-      if (!(await confirmDialog('Точно удалить все данные?', 'Да, удалить', true))) return;
-      await wipeAll(); toast('Все данные удалены'); rerender();
-    } }, 'Удалить все данные'));
 }

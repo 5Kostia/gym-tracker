@@ -398,3 +398,4 @@ body.noscroll #toast { top: calc(var(--visible-top, 0px) + var(--safe-top) + 62p
 .calc-table th { text-align: left; color: var(--dim); padding: 0 2px 6px; border-bottom: 1px solid var(--line); }
 .calc-table th:last-child { text-align: right; }
 @media (max-width: 360px) { .tab { font-size: 9px; } }
+.custom-item-actions { display: grid; gap: 8px; margin-top: 12px; }
