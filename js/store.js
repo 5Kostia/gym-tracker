@@ -165,16 +165,18 @@ export async function addCustomExercise(name, category) {
   return entry;
 }
 
-export async function renameCustomExercise(oldName, name) {
+export async function updateCustomExercise(oldName, name, category) {
   const entry = S.customExercises.find(item => item.name === oldName);
   name = name.trim().replace(/\s+/g, ' ');
   const oldKey = exerciseNameKey(oldName);
   const key = exerciseNameKey(name);
-  if (!entry || !key || exerciseCatalog().some(item => exerciseNameKey(item.name) === key && key !== oldKey)) return false;
-  if (name === oldName) return true;
-  const workouts = S.workouts.filter(w => w.exercises.some(ex => exerciseNameKey(ex.name) === oldKey))
+  if (!entry || !key || !categoryIds.has(category) ||
+      exerciseCatalog().some(item => exerciseNameKey(item.name) === key && key !== oldKey)) return false;
+  const renamed = name !== oldName;
+  if (!renamed && category === entry.category) return true;
+  const workouts = (renamed ? S.workouts : []).filter(w => w.exercises.some(ex => exerciseNameKey(ex.name) === oldKey))
     .map(w => ({ ...w, updatedAt: Date.now(), exercises: w.exercises.map(ex => exerciseNameKey(ex.name) === oldKey ? { ...ex, name } : ex) }));
-  await DB.bulk({ workouts, exercises: [{ ...entry, name }] }, false, { exercises: [oldName] });
+  await DB.bulk({ workouts, exercises: [{ name, category }] }, false, renamed ? { exercises: [oldName] } : {});
   await loadAll();
   return true;
 }
@@ -277,13 +279,15 @@ export async function removeMeasureType(name) {
   await loadAll();
 }
 
-export async function renameMeasureType(oldName, name) {
+export async function updateMeasureType(oldName, name, unit) {
   name = name.trim();
-  if (!name || !S.measureTypes.some(t => t.name === oldName && !t.builtin) ||
+  unit = unit.trim();
+  const current = S.measureTypes.find(t => t.name === oldName && !t.builtin);
+  if (!name || !current ||
       S.measureTypes.some(t => t.name !== oldName && t.name.toLowerCase() === name.toLowerCase())) return false;
-  if (name === oldName) return true;
-  const types = S.measureTypes.map(t => t.name === oldName ? { ...t, name } : t);
-  const measurements = S.measurements.filter(m => m.type === oldName).map(m => ({ ...m, type: name }));
+  if (name === oldName && unit === current.unit) return true;
+  const types = S.measureTypes.map(t => t.name === oldName ? { ...t, name, unit } : t);
+  const measurements = (name === oldName ? [] : S.measurements).filter(m => m.type === oldName).map(m => ({ ...m, type: name }));
   await DB.bulk({ measurements, meta: [{ key: 'measureTypes', value: types }] }, false);
   await loadAll();
   return true;

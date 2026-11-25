@@ -1,6 +1,6 @@
 // Замеры тела: ввод нескольких значений сразу, история по каждому типу.
 import { h, sheet, confirmDialog, toast, todayStr, fmtDate, fmtShort, fmtNum, num, uid } from '../util.js';
-import { S, saveMeasurement, deleteMeasurement, measurementsOfType, addMeasureType, removeMeasureType, renameMeasureType } from '../store.js';
+import { S, saveMeasurement, deleteMeasurement, measurementsOfType, addMeasureType, removeMeasureType, updateMeasureType } from '../store.js';
 import { lineChart } from '../charts.js';
 
 export function renderMeasures(root, rerender) {
@@ -73,25 +73,27 @@ function openCustomMeasurements(rerender) {
 }
 
 function addTypeDialog(rerender, existing) {
-  const p = sheet({ title: existing ? 'Переименовать измерение' : 'Новое измерение' });
+  const p = sheet({ title: existing ? 'Изменить измерение' : 'Новое измерение' });
   const name = h('input', { type: 'text', placeholder: 'Например, Шея', value: existing?.name || '', autocomplete: 'off', maxlength: '40' });
-  const unit = h('input', { type: 'text', placeholder: 'см', value: 'см', maxlength: '10' });
-  p.body.append(
+  const unit = h('input', { type: 'text', placeholder: 'см', value: existing ? existing.unit || '' : 'см', maxlength: '10' });
+  const controls = h('div', { class: 'custom-item-actions' },
     h('label', { class: 'field' }, h('span', null, 'Название'), name),
-    existing ? null : h('label', { class: 'field' }, h('span', null, 'Единица'), unit),
+    h('label', { class: 'field' }, h('span', null, 'Единица измерения'), unit),
+    existing && measurementsOfType(existing.name).length ? h('p', { class: 'sub' }, 'Новая единица применяется и к истории. Числа сохраняются как введены.') : null,
     h('button', { class: 'btn primary block', type: 'button', onclick: async ({ currentTarget }) => {
       currentTarget.disabled = true;
       try {
-        const ok = existing ? await renameMeasureType(existing.name, name.value) : await addMeasureType(name.value, unit.value);
+        const ok = existing ? await updateMeasureType(existing.name, name.value, unit.value) : await addMeasureType(name.value, unit.value);
         if (!ok) { toast(name.value.trim() ? 'Такое измерение уже есть' : 'Введите название'); return; }
-        toast(existing ? 'Название сохранено' : 'Измерение добавлено');
+        toast(existing ? 'Измерение обновлено' : 'Измерение добавлено');
         await p.close();
         await rerender();
       } catch (error) {
         console.error(error);
         toast('Не удалось сохранить измерение');
       } finally { currentTarget.disabled = false; }
-    } }, existing ? 'Сохранить название' : 'Добавить'));
+    } }, existing ? 'Сохранить изменения' : 'Добавить'));
+  p.body.append(controls);
   setTimeout(() => name.focus(), 80);
 }
 
@@ -102,7 +104,7 @@ function openType(t, rerender) {
     const arr = measurementsOfType(t.name);
     if (!t.builtin) {
       p.body.append(h('div', { class: 'custom-item-actions' },
-        h('button', { class: 'btn block', type: 'button', onclick: () => addTypeDialog(p.close, t) }, 'Переименовать измерение'),
+        h('button', { class: 'btn block', type: 'button', onclick: () => addTypeDialog(p.close, t) }, 'Изменить измерение'),
         h('button', { class: 'btn danger block', type: 'button', onclick: async ({ currentTarget }) => {
           if (!(await confirmDialog(`Удалить измерение «${t.name}» вместе со всеми его записями?`, 'Удалить', true))) return;
           currentTarget.disabled = true;

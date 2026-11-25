@@ -3,7 +3,7 @@ import { h, svg, sheet, confirmDialog, toast, todayStr, fmtDay, fmtVolume, parse
 import {
   S, FEELS, EXERCISE_CATEGORIES, newWorkout, saveWorkout, deleteWorkout, workoutVolume, countSets,
   exerciseCatalog, exerciseNameKey, recentExerciseNames, addCustomExercise, lastSetsFor,
-  renameCustomExercise, removeCustomExercise,
+  updateCustomExercise, removeCustomExercise,
 } from '../store.js';
 
 function formatCardioDuration(total) {
@@ -91,6 +91,44 @@ export function workoutCard(w, onOpen) {
     w.notes ? h('div', { class: 'meta' }, '📝 ' + (w.notes.length > 80 ? w.notes.slice(0, 80) + '…' : w.notes)) : null);
 }
 
+function exerciseForm({ name = '', category = '', submitLabel, save, extra }) {
+  const nameField = h('input', { type: 'text', value: name, autocomplete: 'off', required: true });
+  const categoryField = h('select', { required: true },
+    h('option', { value: '', disabled: true, selected: !category }, 'Выберите категорию'),
+    EXERCISE_CATEGORIES.map(({ id, label }) => h('option', { value: id, selected: category === id }, label)));
+  const submit = h('button', { class: 'btn primary block', type: 'submit' }, submitLabel);
+  return h('form', { class: 'custom-item-actions', onsubmit: async event => {
+    event.preventDefault();
+    if (!nameField.value.trim()) { nameField.focus(); return; }
+    submit.disabled = true;
+    try {
+      await save(nameField.value, categoryField.value);
+    } catch (error) {
+      console.error(error);
+      toast('Не удалось сохранить упражнение');
+    } finally {
+      submit.disabled = false;
+    }
+  } },
+  h('label', { class: 'field' }, h('span', null, 'Название'), nameField),
+  h('label', { class: 'field' }, h('span', null, 'Категория'), categoryField),
+  submit, extra);
+}
+
+function addExerciseFromList(rerender) {
+  const p = sheet({ title: 'Своё упражнение' });
+  p.body.append(exerciseForm({ submitLabel: 'Добавить упражнение', save: async (name, category) => {
+    if (exerciseCatalog().some(entry => exerciseNameKey(entry.name) === exerciseNameKey(name))) {
+      toast('Такое упражнение уже есть');
+      return;
+    }
+    if (!await addCustomExercise(name, category)) return;
+    await p.close();
+    toast('Упражнение добавлено');
+    rerender();
+  } }));
+}
+
 function manageExercises(rerender) {
   const manager = sheet({ title: 'Свои упражнения', onClose: () => rerender() });
   function draw() {
@@ -102,7 +140,6 @@ function manageExercises(rerender) {
   }
   function edit(exercise) {
     const editor = sheet({ title: 'Своё упражнение' });
-    const name = h('input', { type: 'text', value: exercise.name, autocomplete: 'off', required: true });
     const save = async (action, message) => {
       editor.box.inert = true;
       try {
@@ -115,17 +152,17 @@ function manageExercises(rerender) {
         toast('Не удалось изменить упражнение');
       } finally { editor.box.inert = false; }
     };
-    editor.body.append(h('form', { class: 'custom-item-actions', onsubmit: event => {
-      event.preventDefault();
-      save(() => renameCustomExercise(exercise.name, name.value), 'Название сохранено');
-    } },
-    h('label', { class: 'field' }, h('span', null, 'Название'), name),
-    h('button', { class: 'btn primary block', type: 'submit' }, 'Сохранить название'),
-    h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
-      if (await confirmDialog(`Убрать «${exercise.name}» из списка упражнений? Записанные тренировки сохранятся.`, 'Убрать', true)) {
-        await save(() => removeCustomExercise(exercise.name), 'Упражнение убрано из списка');
-      }
-    } }, 'Удалить из списка')));
+    editor.body.append(exerciseForm({
+      name: exercise.name,
+      category: exercise.category,
+      submitLabel: 'Сохранить изменения',
+      save: (name, category) => save(() => updateCustomExercise(exercise.name, name, category), 'Упражнение обновлено'),
+      extra: h('button', { class: 'btn danger block', type: 'button', onclick: async () => {
+        if (await confirmDialog(`Убрать «${exercise.name}» из списка упражнений? Записанные тренировки сохранятся.`, 'Убрать', true)) {
+          await save(() => removeCustomExercise(exercise.name), 'Упражнение убрано из списка');
+        }
+      } }, 'Удалить из списка'),
+    }));
   }
   draw();
 }
@@ -135,7 +172,9 @@ export function renderWorkouts(root, rerender) {
     h('h1', null, 'Тренировки'),
     h('p', { class: 'sub' }, 'История всех тренировок. Нажмите на карточку, чтобы изменить или удалить.'),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => openEditor({ date: todayStr() }, rerender) }, '＋ Новая тренировка'));
-  root.append(h('button', { class: 'btn ghost block', type: 'button', onclick: () => manageExercises(rerender) }, 'Свои упражнения'));
+  root.append(h('div', { class: 'custom-item-actions' },
+    h('button', { class: 'btn small block', type: 'button', onclick: () => addExerciseFromList(rerender) }, '＋ Своё упражнение'),
+    h('button', { class: 'btn small block', type: 'button', onclick: () => manageExercises(rerender) }, 'Свои упражнения')));
 
   if (!S.workouts.length) {
     root.append(h('div', { class: 'empty' }, 'Пока нет ни одной тренировки. Нажмите «Новая тренировка», чтобы записать упражнения или кардио.'));
@@ -356,33 +395,18 @@ export function openEditor(params, onDone) {
     const exerciseButton = (entry) => h('button', { type: 'button', onclick: () => add(entry) }, entry.name);
 
     function createExercise(name) {
-      const nameField = h('input', { type: 'text', required: true, autocomplete: 'off', value: name.trim() });
-      const categoryField = h('select', { required: true },
-        h('option', { value: '', disabled: true, selected: true }, 'Выберите категорию'),
-        EXERCISE_CATEGORIES.map(({ id, label }) => h('option', { value: id }, label)));
-      const submit = h('button', { class: 'btn primary block', type: 'submit' }, 'Добавить упражнение');
-      const form = h('form', { onsubmit: async (event) => {
-        event.preventDefault();
-        if (!nameField.value.trim()) { nameField.focus(); return; }
-        submit.disabled = true;
-        try {
-          const entry = await addCustomExercise(nameField.value, categoryField.value);
+      const form = exerciseForm({
+        name: name.trim(),
+        submitLabel: 'Добавить упражнение',
+        save: async (name, category) => {
+          const entry = await addCustomExercise(name, category);
           if (entry && p.box.isConnected) add(entry);
-        } catch (error) {
-          console.error(error);
-          toast('Не удалось сохранить упражнение');
-        } finally {
-          submit.disabled = false;
-        }
-      } },
-      h('label', { class: 'field' }, h('span', null, 'Название'), nameField),
-      h('label', { class: 'field' }, h('span', null, 'Категория'), categoryField),
-      submit,
-      h('button', { class: 'btn ghost block', type: 'button', onclick: showPicker }, 'К списку упражнений'));
+        },
+        extra: h('button', { class: 'btn ghost block', type: 'button', onclick: showPicker }, 'К списку упражнений'),
+      });
       p.setTitle('Своё упражнение');
       p.body.replaceChildren(form);
-      if (!nameField.value) nameField.focus({ preventScroll: true });
-      else categoryField.focus({ preventScroll: true });
+      form.querySelector(name.trim() ? 'select' : 'input').focus({ preventScroll: true });
     }
 
     function draw() {
