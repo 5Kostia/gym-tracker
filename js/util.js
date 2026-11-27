@@ -17,41 +17,84 @@ export function h(tag, props, ...kids) {
   return el;
 }
 
+let choiceId = 0;
+
+function setChoiceOpen(toggle, open) {
+  toggle.setAttribute('aria-expanded', String(open));
+  setRevealed(toggle.nextElementSibling, open);
+}
+
+export function setRevealed(panel, open) {
+  panel.classList.toggle('is-revealed', open);
+  panel.inert = !open;
+}
+
+export function setSwitchIndex(control, index) {
+  control.dataset.selected = index;
+  Array.from(control.children, (button, position) => {
+    button.classList.toggle('on', position === index);
+    button.setAttribute('aria-pressed', String(position === index));
+  });
+}
+
+export function slidingContent(content, direction) {
+  return h('div', { 'data-slide': direction ? (direction > 0 ? 'next' : 'previous') : null }, content);
+}
+
 // Keep form validation and change events on the select, with an in-page picker.
 export function choiceField(label, select, { className = '' } = {}) {
   select.hidden = true;
+  const id = 'choice-options-' + ++choiceId;
   const value = h('span');
-  const summary = h('summary', { class: 'choice-option' }, value, h('span', { class: 'choice-arrow', 'aria-hidden': 'true' }));
+  const toggle = h('button', {
+    class: 'choice-option choice-toggle', type: 'button', 'aria-expanded': 'false', 'aria-controls': id,
+    onclick: () => {
+      if (toggle.getAttribute('aria-expanded') === 'true') setChoiceOpen(toggle, false);
+      else openPicker();
+    },
+  }, value, h('span', { class: 'choice-arrow', 'aria-hidden': 'true' }));
   const buttons = Array.from(select.options, option => option.disabled ? null : h('button', {
     class: 'choice-option', type: 'button', onclick: () => {
       select.value = option.value;
-      details.open = false;
-      summary.focus({ preventScroll: true });
+      closePicker();
       select.dispatchEvent(new Event('change', { bubbles: true }));
     },
   }, option.textContent));
-  const details = h('details', { class: 'choice', name: 'gym-tracker-choice' }, summary,
-    h('div', { class: 'choice-options', role: 'group', 'aria-label': label }, buttons));
+  const options = h('div', { class: 'reveal', inert: true, id },
+    h('div', { class: 'reveal-clip' },
+      h('div', { class: 'choice-options', role: 'group', 'aria-label': label }, buttons)));
+  const picker = h('div', { class: 'choice' }, toggle, options);
+
+  function openPicker() {
+    const previous = document.querySelector('.choice-toggle[aria-expanded="true"]');
+    if (previous && previous !== toggle) setChoiceOpen(previous, false);
+    setChoiceOpen(toggle, true);
+  }
+
+  function closePicker() {
+    toggle.focus({ preventScroll: true });
+    setChoiceOpen(toggle, false);
+  }
+
   function refresh() {
     value.textContent = select.selectedOptions[0]?.textContent || 'Выберите вариант';
-    summary.setAttribute('aria-label', label + ': ' + value.textContent);
+    toggle.setAttribute('aria-label', label + ': ' + value.textContent);
     buttons.forEach((button, index) => button?.setAttribute('aria-pressed', String(index === select.selectedIndex)));
   }
   select.addEventListener('change', refresh);
   select.addEventListener('choice-refresh', refresh);
   select.addEventListener('invalid', event => {
     event.preventDefault();
-    details.open = true;
-    summary.focus();
+    openPicker();
+    toggle.focus();
   });
-  details.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !details.open) return;
+  picker.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || toggle.getAttribute('aria-expanded') !== 'true') return;
     event.stopPropagation();
-    details.open = false;
-    summary.focus();
+    closePicker();
   });
   refresh();
-  return h('div', { class: ('choice-field ' + className).trim() }, h('span', null, label), select, details);
+  return h('div', { class: ('choice-field ' + className).trim() }, h('span', null, label), select, picker);
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

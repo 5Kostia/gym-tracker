@@ -32,16 +32,24 @@ function goTab(id) {
   window.scrollTo(0, 0);
 }
 
+const tabButtons = TABS.map((tab) => {
+  const icon = tab.icon
+    ? svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: tab.icon }))
+    : h('span', { class: 'dumbbell-icon' });
+  return h('button', { class: 'tab tab-' + tab.id, type: 'button', onclick: () => goTab(tab.id) },
+    h('span', { class: 'tab-icon', 'aria-hidden': 'true' }, icon), tab.label);
+});
+const tabBar = h('div', { class: 'inner' }, tabButtons);
+
 function renderTabs() {
-  const inner = h('div', { class: 'inner' }, TABS.map((t) => {
-    const icon = t.icon
-      ? svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: t.icon }))
-      : h('span', { class: 'dumbbell-icon' });
-    return h('button', { class: 'tab tab-' + t.id + (t.id === current ? ' active' : ''), type: 'button',
-      'aria-current': t.id === current ? 'page' : null, onclick: () => goTab(t.id) },
-      h('span', { class: 'tab-icon', 'aria-hidden': 'true' }, icon), t.label);
-  }));
-  tabsEl.replaceChildren(inner);
+  const active = TABS.findIndex(tab => tab.id === current);
+  tabBar.style.setProperty('--tab-position', `${(active + 0.5) / TABS.length * 100}%`);
+  tabButtons.forEach((button, index) => {
+    button.classList.toggle('active', index === active);
+    if (index === active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  if (!tabBar.isConnected) tabsEl.append(tabBar);
 }
 
 function render(animate = false) {

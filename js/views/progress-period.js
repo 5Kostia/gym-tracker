@@ -1,4 +1,4 @@
-import { h, dateToStr, todayStr } from '../util.js';
+import { h, dateToStr, todayStr, setRevealed, setSwitchIndex, slidingContent } from '../util.js';
 
 const currentMonth = () => todayStr().slice(0, 7);
 const firstMonth = '1900-01';
@@ -23,12 +23,13 @@ export function periodChart(title, state, draw) {
   const label = h('b', { 'aria-live': 'polite' });
   const step = offset => {
     state.month = shiftMonth(state.month, offset);
-    update();
+    update(offset);
   };
   const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Предыдущий месяц', onclick: () => step(-1) }, '‹');
   const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Следующий месяц', onclick: () => step(1) }, '›');
   const nav = h('div', { class: 'period-nav' }, prev, label, next);
-  const chartHeader = h('div', { class: 'period-head' }, title ? h('span', { class: 'muted' }, title) : null, nav);
+  const navPanel = h('div', { class: 'reveal period-nav-panel' }, h('div', { class: 'reveal-clip' }, nav));
+  const chartHeader = h('div', { class: 'period-head' }, title ? h('span', { class: 'muted' }, title) : null, navPanel);
 
   const monthInput = value => h('input', {
     type: 'month', required: true, min: firstMonth, max: latest, value,
@@ -43,32 +44,36 @@ export function periodChart(title, state, draw) {
       error.textContent = 'Укажи месяцы по порядку, до текущего включительно.';
       return;
     }
+    const direction = from.value.localeCompare(state.from) || to.value.localeCompare(state.to);
     state.from = from.value;
     state.to = to.value;
     error.textContent = '';
-    update();
+    update(direction);
   } },
   h('label', { class: 'field' }, h('span', null, 'С месяца'), from),
   h('label', { class: 'field' }, h('span', null, 'По месяц'), to),
   h('button', { class: 'btn small', type: 'submit' }, 'Показать'), error);
 
-  const modes = Object.entries({ month: 'Месяц', range: 'Диапазон' }).map(([mode, text]) =>
-    h('button', { type: 'button', onclick: () => { state.mode = mode; update(); } }, text));
-  function update() {
+  const formPanel = h('div', { class: 'reveal' }, h('div', { class: 'reveal-clip' }, form));
+  const modeBar = h('div', {
+    class: 'seg two sliding-switch period-mode', role: 'group', 'aria-label': 'Период графика',
+  }, Object.entries({ month: 'Месяц', range: 'Диапазон' }).map(([mode, text]) =>
+    h('button', { type: 'button', onclick: () => {
+      if ((state.mode || 'month') === mode) return;
+      state.mode = mode;
+      update(mode === 'range' ? 1 : -1);
+    } }, text)));
+  function update(direction) {
     const useRange = state.mode === 'range';
-    nav.hidden = useRange;
-    form.hidden = !useRange;
+    setRevealed(navPanel, !useRange);
+    setRevealed(formPanel, useRange);
     label.textContent = monthLabel(state.month);
     prev.disabled = state.month <= firstMonth;
     next.disabled = state.month >= latest;
-    modes.forEach((button, index) => {
-      const active = index === Number(useRange);
-      button.classList.toggle('on', active);
-      button.setAttribute('aria-pressed', String(active));
-    });
-    graph.replaceChildren(draw(useRange ? state.from : state.month, useRange ? state.to : state.month));
+    setSwitchIndex(modeBar, Number(useRange));
+    const content = draw(useRange ? state.from : state.month, useRange ? state.to : state.month);
+    graph.replaceChildren(slidingContent(content, direction));
   }
   update();
-  return h('div', { class: 'period-chart' }, chartHeader,
-    h('div', { class: 'seg two period-mode', role: 'group', 'aria-label': 'Период графика' }, modes), form, graph);
+  return h('div', { class: 'period-chart' }, chartHeader, modeBar, formPanel, graph);
 }

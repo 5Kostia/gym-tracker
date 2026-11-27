@@ -1,5 +1,5 @@
 // Прогресс: рекорды, графики силы, объём, динамика тела.
-import { h, choiceField, fmtNum, fmtDate, fmtVolume, todayStr, dateToStr, toast } from '../util.js';
+import { h, choiceField, fmtNum, fmtDate, fmtVolume, todayStr, dateToStr, toast, setRevealed } from '../util.js';
 import { S, exerciseHistory, personalRecords, workoutVolume, measurementsOfType, measureUnit,
   ONE_REP_MAX_FORMULAS, saveOneRepMaxFormula } from '../store.js';
 import { lineChart } from '../charts.js';
@@ -85,9 +85,10 @@ export function renderProgress(root, rerender) {
       }
     } }, Array.from(ONE_REP_MAX_FORMULAS, ([id, formula]) =>
       h('option', { value: id, selected: id === S.oneRepMaxFormula }, formula.label)));
-    const formulaControls = h('div', { style: 'margin-top:12px' },
-      choiceField('Формула 1ПМ', formulaSelect),
-      h('p', { class: 'sub' }, 'Расчёт по весу и повторам. На подходах с большим числом повторов оценка менее точна.'));
+    const formulaControls = h('div', { class: 'reveal' }, h('div', { class: 'reveal-clip' },
+      h('div', { style: 'padding-top:12px' },
+        choiceField('Формула 1ПМ', formulaSelect),
+        h('p', { class: 'sub' }, 'Расчёт по весу и повторам. На подходах с большим числом повторов оценка менее точна.'))));
     function draw() {
       const hist = exerciseHistory(ui.ex);
       const maxW = Math.max(0, ...hist.map((x) => x.maxW));
@@ -104,7 +105,7 @@ export function renderProgress(root, rerender) {
         h('div', { class: 'pr gold' }, h('b', null, maxW ? fmtNum(maxW) : '–'), h('span', null, 'макс. вес, кг')),
         h('div', { class: 'pr' }, h('b', null, best ? fmtNum(Math.round(best * 10) / 10) : '–'), h('span', null, 'расчётный 1ПМ')),
         h('div', { class: 'pr' }, h('b', null, maxReps || '–'), h('span', null, 'макс. повторов')));
-      formulaControls.hidden = m.key !== 'e1rm';
+      setRevealed(formulaControls, m.key === 'e1rm');
       graph.replaceChildren(lineChart(pts, { unit: m.unit }));
     }
     root.append(h('h2', null, 'Сила по упражнению'),

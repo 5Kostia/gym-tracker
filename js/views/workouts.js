@@ -406,7 +406,7 @@ export function openEditor(params, onDone) {
       });
       p.setTitle('Своё упражнение');
       p.body.replaceChildren(form);
-      form.querySelector(name.trim() ? 'summary' : 'input').focus({ preventScroll: true });
+      form.querySelector(name.trim() ? '.choice-toggle' : 'input').focus({ preventScroll: true });
     }
 
     function draw() {
